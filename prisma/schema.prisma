@@ -1,0 +1,231 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+}
+
+// --- AUTH MODELLERİ (Bunlar Değişmedi) ---
+model EmailVerificationToken {
+  // ... (içerik aynı)
+  verificationTokenId Int      @id @default(autoincrement())
+  tokenHash           String   @db.NVarChar(256)
+  expiresAt           DateTime
+  isUsed              Boolean  @default(false)
+  lastSentAt          DateTime @default(now())
+  sendCount           Int      @default(1)
+  requestIP           String   @db.NVarChar(45)
+  userAgent           String   @db.NVarChar(512)
+  failedAttempts      Int      @default(0)
+  userId              String   @db.UniqueIdentifier
+  User                User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
+}
+
+model PasswordResetToken {
+  // ... (içerik aynı)
+  resetTokenId Int      @id @default(autoincrement())
+  tokenHash    String   @db.NVarChar(256)
+  expiresAt    DateTime
+  isUsed       Boolean  @default(false)
+  lastSentAt   DateTime @default(now())
+  sendCount    Int      @default(1)
+  requestIP    String   @db.NVarChar(45)
+  userAgent    String   @db.NVarChar(512)
+  failedAttempts Int    @default(0)
+  userId       String   @db.UniqueIdentifier
+  User         User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
+}
+
+model UserExternalLogin {
+  // ... (içerik aynı)
+  id            Int    @id @default(autoincrement())
+  loginProvider String @db.NVarChar(50)
+  providerKey   String @db.NVarChar(255)
+  userId        String @db.UniqueIdentifier
+  User          User   @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@unique([loginProvider, providerKey])
+}
+
+model UserLocalCredential {
+  // ... (içerik aynı)
+  userId       String @id @db.UniqueIdentifier
+  passwordHash String @db.NVarChar(Max)
+  User         User   @relation(fields: [userId], references: [userId], onDelete: Cascade)
+}
+
+model RefreshToken {
+  // ... (içerik aynı)
+  refreshTokenId Int      @id @default(autoincrement())
+  tokenHash      String   @unique @db.NVarChar(256)
+  expiresAt      DateTime
+  isUsed         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  createdByIP    String   @db.NVarChar(45)
+  userAgent      String  @db.NVarChar(512)
+  userId         String   @db.UniqueIdentifier
+  User           User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
+}
+
+
+// --- ANA KULLANICI MODELİ (Güncellendi) ---
+model User {
+  userId          String   @id @default(uuid()) @db.UniqueIdentifier
+  username        String   @unique @db.NVarChar(100)
+  email           String   @unique @db.NVarChar(255)
+  isEmailVerified Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  // Auth İlişkileri
+  EmailVerificationToken EmailVerificationToken[]
+  PasswordResetToken     PasswordResetToken[]
+  RefreshToken           RefreshToken[]
+  UserExternalLogin      UserExternalLogin[]
+  UserLocalCredential    UserLocalCredential?
+
+  // YENİ PROFİL İLİŞKİLERİ (1:1)
+  Profile UserProfile?
+  Body    UserBody?
+  Goal    UserGoal?
+  Setting UserSetting?
+
+  // YENİ PROFİL İLİŞKİLERİ (M:N via Junction Tables)
+  HealthLimitations  UserHealthLimitation[]
+  TargetBodyParts    UserGoalPart[]
+  AvailableEquipment UserAvailableWorkoutEquipment[]
+  WorkoutLocations   UserWorkoutLocation[]
+}
+
+
+// ---------------------------------------------
+// YENİ PROFİL TABLOLARI (1:1)
+// ---------------------------------------------
+
+model UserProfile {
+  userId    String   @id @db.UniqueIdentifier
+  firstName String   @db.NVarChar(100)
+  lastName  String   @db.NVarChar(100)
+  birthDate DateTime @db.Date
+  gender    String   @db.NVarChar(50) // <-- ENUM'DAN STRİNG'E DÜZELTİLDİ
+
+  User User @relation(fields: [userId], references: [userId], onDelete: Cascade)
+}
+
+model UserBody {
+  userId        String  @id @db.UniqueIdentifier
+  heightCM      Decimal @db.Decimal(5, 2)
+  weightKG      Decimal @db.Decimal(5, 2)
+  activityLevel String  @db.NVarChar(100) // <-- ENUM'DAN STRİNG'E DÜZELTİLDİ
+  bodyType      String  @db.NVarChar(100) // <-- ENUM'DAN STRİNG'E DÜZELTİLDİ
+
+  User User @relation(fields: [userId], references: [userId], onDelete: Cascade)
+}
+
+model UserGoal {
+  userId         String   @id @db.UniqueIdentifier
+  primaryGoal    String   @db.NVarChar(100) // <-- ENUM'DAN STRİNG'E DÜZELTİLDİ
+  targetWeightKG Decimal? @db.Decimal(5, 2)
+
+  User User @relation(fields: [userId], references: [userId], onDelete: Cascade)
+}
+
+model UserSetting {
+  userId            String @id @db.UniqueIdentifier
+  preferredUnit     String @db.NVarChar(10) // <-- ENUM'DAN STRİNG'E DÜZELTİLDİ
+  preferredLanguage String @db.NVarChar(10) @default("tr")
+  theme             String @db.NVarChar(10) @default("system") // <-- ENUM'DAN STRİNG'E DÜZELTİLDİ
+
+  User User @relation(fields: [userId], references: [userId], onDelete: Cascade)
+}
+
+
+// ---------------------------------------------
+// YENİ ANA VERİ TABLOLARI (M:N için)
+// ---------------------------------------------
+
+model HealthLimitation {
+  healthLimitationId Int    @id @default(autoincrement())
+  name               String @unique @db.NVarChar(100)
+
+  // İlişki
+  users UserHealthLimitation[]
+}
+
+model GoalBodyPart {
+  goalBodyPartId Int    @id @default(autoincrement())
+  name           String @unique @db.NVarChar(100)
+
+  // İlişki
+  users UserGoalPart[]
+}
+
+model WorkoutEquipment {
+  workoutEquipmentId Int    @id @default(autoincrement())
+  name               String @unique @db.NVarChar(100)
+
+  // İlişki
+  users UserAvailableWorkoutEquipment[]
+}
+
+model WorkoutLocation {
+  workoutLocationId Int    @id @default(autoincrement())
+  name              String @unique @db.NVarChar(100)
+
+  // İlişki
+  users UserWorkoutLocation[]
+}
+
+
+// ---------------------------------------------
+// YENİ İLİŞKİ TABLOLARI (M:N Junction Tables)
+// ---------------------------------------------
+
+model UserHealthLimitation {
+  userId             String @db.UniqueIdentifier
+  healthLimitationId Int
+
+  // İlişkiler
+  User             User             @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  HealthLimitation HealthLimitation @relation(fields: [healthLimitationId], references: [healthLimitationId], onDelete: Cascade)
+
+  // Bileşik Anahtar
+  @@id([userId, healthLimitationId])
+}
+
+model UserGoalPart {
+  userId         String @db.UniqueIdentifier
+  goalBodyPartId Int
+
+  // İlişkiler
+  User         User         @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  GoalBodyPart GoalBodyPart @relation(fields: [goalBodyPartId], references: [goalBodyPartId], onDelete: Cascade)
+
+  // Bileşik Anahtar
+  @@id([userId, goalBodyPartId])
+}
+
+model UserAvailableWorkoutEquipment {
+  userId             String @db.UniqueIdentifier
+  workoutEquipmentId Int
+
+  // İlişkiler
+  User             User             @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  WorkoutEquipment WorkoutEquipment @relation(fields: [workoutEquipmentId], references: [workoutEquipmentId], onDelete: Cascade)
+
+  // Bileşik Anahtar
+  @@id([userId, workoutEquipmentId])
+}
+
+model UserWorkoutLocation {
+  userId            String @db.UniqueIdentifier
+  workoutLocationId Int
+
+  // İlişkiler
+  User            User            @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  WorkoutLocation WorkoutLocation @relation(fields: [workoutLocationId], references: [workoutLocationId], onDelete: Cascade)
+
+  // Bileşik Anahtar
+  @@id([userId, workoutLocationId])
+}
