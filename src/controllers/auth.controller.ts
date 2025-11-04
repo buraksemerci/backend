@@ -8,7 +8,8 @@ import {
     SocialRegisterInput,
     SocialLoginInput,
     SocialMergeInput,
-    RefreshInput
+    RefreshInput,
+    LogoutInput
 } from '../utils/zod.schemas';
 import {
     registerUserService,
@@ -35,7 +36,7 @@ export const registerUserHandler = async (
         const ipAddress = req.ip || 'unknown';
         const userAgent = req.headers['user-agent'] || 'unknown';
 
-        const tokens = await registerUserService(req.body, ipAddress, userAgent);
+        const tokens = await registerUserService(req.body, ipAddress, userAgent, req.body.deviceId);
 
         return res.status(201).json({
             status: 'success',
@@ -66,7 +67,7 @@ export const loginUserHandler = async (
         const ipAddress = req.ip || 'unknown';
         const userAgent = req.headers['user-agent'] || 'unknown';
 
-        const tokens = await loginUserService(req.body, ipAddress, userAgent);
+        const tokens = await loginUserService(req.body, ipAddress, userAgent, req.body.deviceId);
 
         return res.status(200).json({
             status: 'success',
@@ -96,11 +97,11 @@ export const verifyCodeHandler = async (
     try {
         // @ts-ignore
         const userId = req.user.sub;
-        const { code } = req.body;
+        const { code, deviceId } = req.body;
         const ipAddress = req.ip || 'unknown';
         const userAgent = req.headers['user-agent'] || 'unknown';
 
-        const tokens = await verifyEmailCodeService(userId, code, ipAddress, userAgent);
+        const tokens = await verifyEmailCodeService(userId, code, ipAddress, userAgent, deviceId);
 
         return res.status(200).json({
             status: 'success',
@@ -224,7 +225,7 @@ export const socialRegisterHandler = async (
         const ipAddress = req.ip || 'unknown';
         const userAgent = req.headers['user-agent'] || 'unknown';
 
-        const tokens = await socialRegisterService(req.body, ipAddress, userAgent);
+        const tokens = await socialRegisterService(req.body, ipAddress, userAgent, req.body.deviceId);
 
         return res.status(201).json({
             status: 'success',
@@ -261,7 +262,7 @@ export const socialLoginHandler = async (
         const ipAddress = req.ip || 'unknown';
         const userAgent = req.headers['user-agent'] || 'unknown';
 
-        const tokens = await socialLoginService(req.body, ipAddress, userAgent);
+        const tokens = await socialLoginService(req.body, ipAddress, userAgent, req.body.deviceId);
 
         return res.status(200).json({
             status: 'success',
@@ -306,7 +307,7 @@ export const socialMergeHandler = async (
         const userAgent = req.headers['user-agent'] || 'unknown';
 
         // Servis, her iki kimliği de doğrulayacak ve token döndürecek
-        const tokens = await socialMergeService(req.body, ipAddress, userAgent);
+        const tokens = await socialMergeService(req.body, ipAddress, userAgent, req.body.deviceId);
 
         // Başarılı: Hesaplar birleştirildi ve "doğrulanmış" token'lar döndürüldü
         return res.status(200).json({
@@ -348,7 +349,7 @@ export const refreshTokenHandler = async (
         const userAgent = req.headers['user-agent'] || 'unknown';
 
         // Servis, eski token'ı doğrulayacak ve yeni bir set döndürecek
-        const tokens = await refreshTokenService(req.body.refreshToken, ipAddress, userAgent);
+        const tokens = await refreshTokenService(req.body.refreshToken, ipAddress, userAgent, req.body.deviceId);
 
         // Başarılı: Yeni token seti
         return res.status(200).json({
@@ -373,13 +374,13 @@ export const refreshTokenHandler = async (
     }
 };
 
-// === YENİ LOGOUT HANDLER'I ===
-export const logoutUserHandler = async (req: Request, res: Response) => {
+export const logoutUserHandler = async (req: Request<{}, {}, LogoutInput['body']>, res: Response) => {
     try {
         // @ts-ignore
         const userId = req.user.sub; // checkJwt'den gelen 'userId'
+        const { deviceId } = req.body; // Zod'dan gelen 'deviceId'
 
-        await logoutUserService(userId);
+        await logoutUserService(userId, deviceId); // <-- DEĞİŞTİ
 
         // Başarılı: Token'lar silindi
         return res.status(200).json({

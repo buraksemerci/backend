@@ -38,6 +38,7 @@ export const registerSchema = z.object({
         email: z.string().email('Geçersiz e-posta adresi.'),
         password: z.string().min(8, 'Şifre en az 8 karakter olmalıdır.'),
         username: z.string().min(3, 'Kullanıcı adı en az 3 karakter olmalıdır.'),
+        deviceId: z.string().min(1, 'Cihaz ID zorunludur.'),
 
         // 1:1 Profil Verileri
         profile: userProfileSchema,
@@ -61,6 +62,7 @@ export const loginSchema = z.object({
     body: z.object({
         loginIdentifier: z.string().min(3, 'Giriş bilgisi gerekli.'),
         password: z.string().min(1, 'Şifre gerekli.'),
+        deviceId: z.string().min(1, 'Cihaz ID zorunludur.'),
     }),
 });
 // ===================================
@@ -72,6 +74,7 @@ export const verifyCodeSchema = z.object({
             .string()
             .min(6, 'Kod 6 haneli olmalıdır.')
             .max(6, 'Kod 6 haneli olmalıdır.'),
+        deviceId: z.string().min(1, 'Cihaz ID zorunludur.'),
     }),
 });
 // ===================================
@@ -111,6 +114,7 @@ export const socialRegisterSchema = z.object({
         // === YENİ (SİZİN TALEBİNİZ ÜZERİNE EKLENDİ) ===
         // 'register' akışıyla aynı olması için username'i zorunlu kılıyoruz.
         username: z.string().min(3, 'Kullanıcı adı en az 3 karakter olmalıdır.'),
+        deviceId: z.string().min(1, 'Cihaz ID zorunludur.'),
         // ============================================
 
         // 1:1 Profil Verileri (Lokal kayıt ile aynı)
@@ -134,6 +138,7 @@ export const socialLoginSchema = z.object({
     body: z.object({
         provider: socialProviderEnum, // "GOOGLE", "APPLE", "FACEBOOK"
         providerToken: z.string().min(1, 'Provider token zorunludur.'),
+        deviceId: z.string().min(1, 'Cihaz ID zorunludur.'),
     }),
 });
 
@@ -145,6 +150,7 @@ export const socialMergeSchema = z.object({
         provider: socialProviderEnum, // "GOOGLE", "APPLE", "FACEBOOK"
         providerToken: z.string().min(1, 'Provider token zorunludur.'),
         password: z.string().min(1, 'Şifre zorunludur.'),
+        deviceId: z.string().min(1, 'Cihaz ID zorunludur.'),
     }),
 });
 
@@ -154,6 +160,15 @@ export const socialMergeSchema = z.object({
 export const refreshSchema = z.object({
     body: z.object({
         refreshToken: z.string().min(1, 'Refresh token zorunludur.'),
+        deviceId: z.string().min(1, 'Cihaz ID zorunludur.'),
+    }),
+});
+// ===================================
+// ÇIKIŞ (LOGOUT) ŞEMASI (YENİ)
+// ===================================
+export const logoutSchema = z.object({
+    body: z.object({
+        deviceId: z.string().min(1, 'Cihaz ID zorunludur.'),
     }),
 });
 
@@ -166,3 +181,4 @@ export type VerifyCodeInput = z.infer<typeof verifyCodeSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type RefreshInput = z.infer<typeof refreshSchema>;
+export type LogoutInput = z.infer<typeof logoutSchema>;

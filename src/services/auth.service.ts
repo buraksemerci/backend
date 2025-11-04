@@ -41,7 +41,8 @@ interface RegisterResult {
 export const registerUserService = async (
     input: RegisterInput['body'],
     ipAddress: string,
-    userAgent: string
+    userAgent: string,
+    deviceId: string // <-- EKLENDİ
 ) => {
 
     // 1. Şifreyi Hash'le
@@ -179,7 +180,8 @@ export const registerUserService = async (
             const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
             const expiresAtRT = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRATION_DAYS || '30') * 24 * 60 * 60 * 1000));
 
-            await tx.refreshToken.deleteMany({ where: { userId } });
+            // --- DEĞİŞİKLİK ---
+            await tx.refreshToken.deleteMany({ where: { userId, deviceId } });
             await tx.refreshToken.create({
                 data: {
                     userId: userId,
@@ -187,8 +189,10 @@ export const registerUserService = async (
                     expiresAt: expiresAtRT,
                     createdByIP: ipAddress,
                     userAgent: userAgent,
+                    deviceId: deviceId // <-- EKLENDİ
                 }
             });
+            // --- DEĞİŞİKLİK SONU ---
 
             return { user: { id: userId, email: input.email }, tokens };
         });
@@ -210,7 +214,8 @@ export const registerUserService = async (
 export const loginUserService = async (
     input: LoginInput['body'],
     ipAddress: string,
-    userAgent: string
+    userAgent: string,
+    deviceId: string // <-- EKLENDİ
 ) => {
     const { loginIdentifier, password } = input;
 
@@ -250,8 +255,9 @@ export const loginUserService = async (
     const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
     const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRATION_DAYS || '30') * 24 * 60 * 60 * 1000));
 
+    // --- DEĞİŞİKLİK ---
     await prisma.$transaction([
-        prisma.refreshToken.deleteMany({ where: { userId: user.userId } }),
+        prisma.refreshToken.deleteMany({ where: { userId: user.userId, deviceId } }),
         prisma.refreshToken.create({
             data: {
                 userId: user.userId,
@@ -259,9 +265,11 @@ export const loginUserService = async (
                 expiresAt: expiresAt,
                 createdByIP: ipAddress,
                 userAgent: userAgent,
+                deviceId: deviceId // <-- EKLENDİ
             }
         })
     ]);
+    // --- DEĞİŞİKLİK SONU ---
 
     return tokens;
 };
@@ -271,7 +279,8 @@ export const verifyEmailCodeService = async (
     userId: string,
     code: string,
     ipAddress: string,
-    userAgent: string
+    userAgent: string,
+    deviceId: string // <-- EKLENDİ
 ) => {
     // 1. Kullanıcıyı ve token'ı bul
     const userWithToken = await prisma.user.findUnique({
@@ -316,8 +325,9 @@ export const verifyEmailCodeService = async (
     const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
     const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRATION_DAYS || '30') * 24 * 60 * 60 * 1000));
 
+    // --- DEĞİŞİKLİK ---
     await prisma.$transaction([
-        prisma.refreshToken.deleteMany({ where: { userId: userId } }),
+        prisma.refreshToken.deleteMany({ where: { userId: userId, deviceId } }),
         prisma.refreshToken.create({
             data: {
                 userId: userId,
@@ -325,9 +335,11 @@ export const verifyEmailCodeService = async (
                 expiresAt: expiresAt,
                 createdByIP: ipAddress,
                 userAgent: userAgent,
+                deviceId: deviceId // <-- EKLENDİ
             }
         })
     ]);
+    // --- DEĞİŞİKLİK SONU ---
 
     return tokens;
 };
@@ -498,7 +510,8 @@ export const resetPasswordService = async (input: ResetPasswordInput['body']) =>
 export const socialRegisterService = async (
     input: SocialRegisterInput['body'],
     ipAddress: string,
-    userAgent: string
+    userAgent: string,
+    deviceId: string // <-- EKLENDİ
 ) => {
 
     // 1. Gelen Token'ı Doğrula
@@ -620,7 +633,8 @@ export const socialRegisterService = async (
             const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
             const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRATION_DAYS || '30') * 24 * 60 * 60 * 1000));
 
-            await tx.refreshToken.deleteMany({ where: { userId } });
+            // --- DEĞİŞİKLİK ---
+            await tx.refreshToken.deleteMany({ where: { userId, deviceId } });
             await tx.refreshToken.create({
                 data: {
                     userId: userId,
@@ -628,8 +642,10 @@ export const socialRegisterService = async (
                     expiresAt: expiresAt,
                     createdByIP: ipAddress,
                     userAgent: userAgent,
+                    deviceId: deviceId // <-- EKLENDİ
                 }
             });
+            // --- DEĞİŞİKLİK SONU ---
 
             return tokens;
         });
@@ -652,7 +668,8 @@ export const socialRegisterService = async (
 export const socialLoginService = async (
     input: SocialLoginInput['body'],
     ipAddress: string,
-    userAgent: string
+    userAgent: string,
+    deviceId: string // <-- EKLENDİ
 ) => {
 
     // 1. Gelen Token'ı Doğrula
@@ -717,8 +734,8 @@ export const socialLoginService = async (
     const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRATION_DAYS || '30') * 24 * 60 * 60 * 1000));
 
     await prisma.$transaction(async (tx) => {
-        // Eskileri sil, yenisini ekle
-        await tx.refreshToken.deleteMany({ where: { userId: user.userId } });
+        // --- DEĞİŞİKLİK ---
+        await tx.refreshToken.deleteMany({ where: { userId: user.userId, deviceId } });
         await tx.refreshToken.create({
             data: {
                 userId: user.userId,
@@ -726,8 +743,10 @@ export const socialLoginService = async (
                 expiresAt: expiresAt,
                 createdByIP: ipAddress,
                 userAgent: userAgent,
+                deviceId: deviceId // <-- EKLENDİ
             }
         });
+        // --- DEĞİŞİKLİK SONU ---
 
         // Dolaylı doğrulama
         if (!user.isEmailVerified) {
@@ -756,8 +775,9 @@ export const socialLoginService = async (
 export const socialMergeService = async (
     input: SocialMergeInput['body'],
     ipAddress: string,
-    userAgent: string
-) => { // <-- Promise tipi kaldırıldı
+    userAgent: string,
+    deviceId: string // <-- EKLENDİ
+) => {
 
     // 1. Sosyal Token'ı Doğrula (Google vb.)
     let providerData: {
@@ -805,8 +825,8 @@ export const socialMergeService = async (
     const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRATION_DAYS || '30') * 24 * 60 * 60 * 1000));
 
     await prisma.$transaction(async (tx) => {
-        // 6a. Refresh token'ı kaydet (yeni oturum)
-        await tx.refreshToken.deleteMany({ where: { userId: user.userId } });
+        // --- DEĞİŞİKLİK ---
+        await tx.refreshToken.deleteMany({ where: { userId: user.userId, deviceId } });
         await tx.refreshToken.create({
             data: {
                 userId: user.userId,
@@ -814,8 +834,10 @@ export const socialMergeService = async (
                 expiresAt: expiresAt,
                 createdByIP: ipAddress,
                 userAgent: userAgent,
+                deviceId: deviceId // <-- EKLENDİ
             }
         });
+        // --- DEĞİŞİKLİK SONU ---
 
         // 6b. Kullanıcıyı doğrulanmış yap
         if (!user.isEmailVerified) {
@@ -845,9 +867,11 @@ export const socialMergeService = async (
     // 7. Yeni, "doğrulanmış" token'ları döndür
     return tokens;
 };
+
 // === YENİ REFRESH TOKEN SERVİSİ ===
 export const refreshTokenService = async (
     refreshToken: string,
+    deviceId: string, // <-- EKLENDİ
     ipAddress: string,
     userAgent: string
 ) => {
@@ -869,13 +893,16 @@ export const refreshTokenService = async (
     const userId = payload.sub;
 
     // 3. Token'ı Veritabanında Ara
+    // --- DEĞİŞİKLİK ---
     const tokenRecord = await prisma.refreshToken.findFirst({
         where: {
             userId: userId,
+            deviceId: deviceId, // <-- EKLENDİ
             isUsed: false,
             expiresAt: { gt: new Date() }, // Süresi dolmamış
         },
     });
+    // --- DEĞİŞİKLİK SONU ---
 
     if (!tokenRecord) {
         throw new Error('INVALID_REFRESH_TOKEN');
@@ -918,6 +945,7 @@ export const refreshTokenService = async (
         });
 
         // Yeni refresh token'ı kaydet
+        // --- DEĞİŞİKLİK ---
         await tx.refreshToken.create({
             data: {
                 userId: userId,
@@ -925,8 +953,10 @@ export const refreshTokenService = async (
                 expiresAt: newExpiresAt,
                 createdByIP: ipAddress,
                 userAgent: userAgent,
+                deviceId: deviceId // <-- EKLENDİ
             }
         });
+        // --- DEĞİŞİKLİK SONU ---
     });
 
     // 8. Yeni token setini döndür
@@ -934,15 +964,16 @@ export const refreshTokenService = async (
 };
 
 // === YENİ LOGOUT SERVİSİ ===
-export const logoutUserService = async (userId: string) => {
-    // Plan: Kullanıcının TÜM refresh token'larını silerek
-    // tüm cihazlardan çıkış yapmasını sağla.
-
+export const logoutUserService = async (userId: string, deviceId: string) => { // <-- İMZA DEĞİŞTİ
+    // Plan: Kullanıcının sadece bu cihaza ait refresh token'ını sil.
+    // --- İÇERİK DEĞİŞTİ ---
     await prisma.refreshToken.deleteMany({
-        where: { userId: userId },
+        where: {
+            userId: userId,
+            deviceId: deviceId // <-- Sadece bu cihazı sil
+        },
     });
 
-    console.log(`Kullanıcı çıkış yaptı (tüm oturumlar): ${userId}`);
+    console.log(`Kullanıcı çıkış yaptı (cihaz: ${deviceId}): ${userId}`);
     return;
 };
-

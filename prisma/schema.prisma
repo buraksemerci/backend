@@ -57,16 +57,26 @@ model UserLocalCredential {
 }
 
 model RefreshToken {
-  // ... (içerik aynı)
   refreshTokenId Int      @id @default(autoincrement())
   tokenHash      String   @unique @db.NVarChar(256)
+  
+  // --- YENİ ALAN ---
+  // Mobil uygulamanın üreteceği ve saklayacağı (örn: AsyncStorage) unique bir ID
+  deviceId       String   @db.NVarChar(255)
+  // ---------------
+
   expiresAt      DateTime
   isUsed         Boolean  @default(false)
   createdAt      DateTime @default(now())
   createdByIP    String   @db.NVarChar(45)
-  userAgent      String  @db.NVarChar(512)
+  userAgent      String   @db.NVarChar(512)
   userId         String   @db.UniqueIdentifier
   User           User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  // --- YENİ KURAL ---
+  // Bir kullanıcının bir cihazda sadece 1 token'ı olabilir
+  @@unique([userId, deviceId])
+  // ---------------
 }
 
 

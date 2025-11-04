@@ -23,7 +23,8 @@ import {
     socialRegisterSchema,
     socialLoginSchema,
     socialMergeSchema,
-    refreshSchema
+    refreshSchema,
+    logoutSchema
 } from '../utils/zod.schemas';
 
 const router = Router();
@@ -140,6 +141,7 @@ router.post(
 router.post(
     '/logout',
     checkJwt, // 1. Kullanıcının kim olduğunu bilmeliyiz
+    validate(logoutSchema), // 2. Zod ile doğrula
     logoutUserHandler // 2. Controller'a gönder
 );
 
