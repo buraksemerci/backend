@@ -1,10 +1,11 @@
+// src/middlewares/auth.ts
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { env } from '../utils/env'; // <-- YENİ
 
-const JWT_SECRET = process.env.JWT_SECRET || 'varsayilan-cok-gizli-anahtar-degistirin';
+const JWT_SECRET = env.JWT_SECRET; // <-- DEĞİŞTİ
 
 // Bu arayazılım, kullanıcının "en azından bir token'a sahip olmasını" zorunlu kılar.
-// Token'ın "doğrulanmış" (isEmailVerified) olup olmadığını kontrol ETMEZ.
 export const checkJwt = (req: Request, res: Response, next: NextFunction) => {
     // 1. Token'ı Header'dan al (Bearer Token)
     const authHeader = req.headers.authorization;
@@ -19,9 +20,8 @@ export const checkJwt = (req: Request, res: Response, next: NextFunction) => {
         const payload = jwt.verify(token, JWT_SECRET) as { sub: string, isEmailVerified: boolean };
 
         // 3. Payload'ı 'req' nesnesine ekle
-        // Diğer middleware/controller'ların bu bilgiye erişebilmesi için
-        // @ts-ignore (Veya Request tipini genişletmemiz gerekir)
-        req.user = payload;
+        // 'src/types/express/index.d.ts' sayesinde artık tip-güvenli!
+        req.user = payload; // <-- @ts-ignore KALDIRILDI
 
         next();
     } catch (error) {

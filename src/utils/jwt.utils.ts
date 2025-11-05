@@ -1,7 +1,9 @@
+// src/utils/jwt.utils.ts
 import jwt from 'jsonwebtoken';
+import { env } from './env'; // <-- YENİ
 
 // .env dosyanıza bir JWT_SECRET eklediğinizden emin olun!
-const JWT_SECRET = process.env.JWT_SECRET || 'varsayilan-cok-gizli-anahtar-degistirin';
+const JWT_SECRET = env.JWT_SECRET; // <-- DEĞİŞTİ
 const ACCESS_TOKEN_EXPIRY = '15m'; // 15 dakika
 const REFRESH_TOKEN_EXPIRY = '30d'; // 30 gün
 
@@ -23,5 +25,3 @@ export const signTokens = async (userId: string, isEmailVerified: boolean) => {
 
     return { accessToken, refreshToken };
 };
-
-// TODO: Token doğrulama (verify) fonksiyonları eklenecek

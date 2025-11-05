@@ -1,17 +1,19 @@
+// src/controllers/profile.controller.ts
 import { Request, Response } from 'express';
 import { getMyProfileService } from '../services/profile.service';
+import logger from '../utils/logger'; // <-- YENİ
 
 /**
  * Giriş yapmış kullanıcının profil verilerini getirir
  */
 export const getMyProfileHandler = async (req: Request, res: Response) => {
     try {
-        // @ts-ignore
-        const userId = req.user.sub; // checkJwt middleware'inden gelir
-
-        if (!userId) {
-            return res.status(403).json({ status: 'error', message: 'Geçersiz token payload.' });
+        // --- DEĞİŞİKLİK ---
+        if (!req.user) {
+            return res.status(403).json({ status: 'error', message: 'Yetkisiz erişim.' });
         }
+        const userId = req.user.sub; // checkJwt middleware'inden gelir
+        // --- DEĞİŞİKLİK SONU ---
 
         const profileData = await getMyProfileService(userId);
 
@@ -28,10 +30,7 @@ export const getMyProfileHandler = async (req: Request, res: Response) => {
             });
         }
 
-        console.error('Get My Profile Handler Hatası:', error);
-        return res.status(500).json({
-            status: 'error',
-            message: 'Sunucu hatası.',
-        });
+        logger.error(error, 'Get My Profile Handler Hatası'); // <-- DEĞİŞTİ
+        throw error;
     }
 };

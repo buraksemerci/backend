@@ -1,3 +1,4 @@
+// src/controllers/auth.controller.ts
 import { Request, Response } from 'express';
 import {
     RegisterInput,
@@ -21,13 +22,12 @@ import {
     socialRegisterService,
     socialLoginService,
     socialMergeService,
-    refreshTokenService, // <-- YENİ
+    refreshTokenService,
     logoutUserService
 } from '../services/auth.service';
+import logger from '../utils/logger'; // <-- YENİ
 
-// IP ve User Agent'ı req'den alıp servise iletmek için güncellendi
-
-// === REGISTER HANDLER (GÜNCELLENDİ) ===
+// === REGISTER HANDLER ===
 export const registerUserHandler = async (
     req: Request<{}, {}, RegisterInput['body']>,
     res: Response
@@ -50,15 +50,13 @@ export const registerUserHandler = async (
                 message: 'Bu e-posta adresi veya kullanıcı adı zaten kullanımda.',
             });
         }
-        console.error('Register Handler Hatası:', error);
-        return res.status(500).json({
-            status: 'error',
-            message: 'Sunucu hatası. Lütfen tekrar deneyin.',
-        });
+        logger.error(error, 'Register Handler Hatası'); // <-- DEĞİŞTİ
+        // Global error handler'a gitmesi için hatayı fırlat
+        throw error;
     }
 };
 
-// === LOGIN HANDLER (GÜNCELLENDİ) ===
+// === LOGIN HANDLER ===
 export const loginUserHandler = async (
     req: Request<{}, {}, LoginInput['body']>,
     res: Response
@@ -81,15 +79,12 @@ export const loginUserHandler = async (
                 message: 'Geçersiz e-posta/kullanıcı adı veya şifre.',
             });
         }
-        console.error('Login Handler Hatası:', error);
-        return res.status(500).json({
-            status: 'error',
-            message: 'Sunucu hatası. Lütfen tekrar deneyin.',
-        });
+        logger.error(error, 'Login Handler Hatası'); // <-- DEĞİŞTİ
+        throw error;
     }
 };
 
-// === VERIFY CODE HANDLER (GÜNCELLENDİ) ===
+// === VERIFY CODE HANDLER ===
 export const verifyCodeHandler = async (
     req: Request<{}, {}, VerifyCodeInput['body']>,
     res: Response
@@ -123,15 +118,12 @@ export const verifyCodeHandler = async (
                 message: 'Bu hesap zaten doğrulanmış.',
             });
         }
-        console.error('Verify Code Handler Hatası:', error);
-        return res.status(500).json({
-            status: 'error',
-            message: 'Sunucu hatası. Lütfen tekrar deneyin.',
-        });
+        logger.error(error, 'Verify Code Handler Hatası'); // <-- DEĞİŞTİ
+        throw error;
     }
 };
 
-// === RESEND CODE HANDLER (GÜNCELLENDİ) ===
+// === RESEND CODE HANDLER ===
 export const resendCodeHandler = async (req: Request, res: Response) => {
     try {
         if (!req.user) {
@@ -154,15 +146,12 @@ export const resendCodeHandler = async (req: Request, res: Response) => {
                 message: 'Bu hesap zaten doğrulanmış.',
             });
         }
-        console.error('Resend Code Handler Hatası:', error);
-        return res.status(500).json({
-            status: 'error',
-            message: 'Sunucu hatası. Lütfen tekrar deneyin.',
-        });
+        logger.error(error, 'Resend Code Handler Hatası'); // <-- DEĞİŞTİ
+        throw error;
     }
 };
 
-// === FORGOT PASSWORD HANDLER (GÜNCELLENDİ) ===
+// === FORGOT PASSWORD HANDLER ===
 export const forgotPasswordHandler = async (
     req: Request<{}, {}, ForgotPasswordInput['body']>,
     res: Response
@@ -179,15 +168,12 @@ export const forgotPasswordHandler = async (
             message: 'İsteğiniz alındı. Eğer bu e-posta adresi kayıtlı ve doğrulanmış ise, bir şifre sıfırlama kodu gönderilecektir.',
         });
     } catch (error: any) {
-        console.error('Forgot Password Handler Hatası:', error);
-        return res.status(500).json({
-            status: 'error',
-            message: 'Sunucu hatası. Lütfen tekrar deneyin.',
-        });
+        logger.error(error, 'Forgot Password Handler Hatası'); // <-- DEĞİŞTİ
+        throw error;
     }
 };
 
-// === RESET PASSWORD HANDLER (DEĞİŞMEDİ) ===
+// === RESET PASSWORD HANDLER ===
 export const resetPasswordHandler = async (
     req: Request<{}, {}, ResetPasswordInput['body']>,
     res: Response
@@ -212,15 +198,12 @@ export const resetPasswordHandler = async (
                 message: 'Bu hesap, şifre sıfırlamayı desteklemeyen bir sosyal giriş yöntemi (Google, Apple vb.) ile oluşturulmuş.',
             });
         }
-        console.error('Reset Password Handler Hatası:', error);
-        return res.status(500).json({
-            status: 'error',
-            message: 'Sunucu hatası. Lütfen tekrar deneyin.',
-        });
+        logger.error(error, 'Reset Password Handler Hatası'); // <-- DEĞİŞTİ
+        throw error;
     }
 };
 
-// === SOCIAL REGISTER HANDLER (GÜNCELLENDİ) ===
+// === SOCIAL REGISTER HANDLER ===
 export const socialRegisterHandler = async (
     req: Request<{}, {}, SocialRegisterInput['body']>,
     res: Response
@@ -249,15 +232,12 @@ export const socialRegisterHandler = async (
                 message: 'Bu e-posta adresi zaten farklı bir yöntemle doğrulanmış.',
             });
         }
-        console.error('Social Register Handler Hatası:', error);
-        return res.status(500).json({
-            status: 'error',
-            message: 'Sunucu hatası. Lütfen tekrar deneyin.',
-        });
+        logger.error(error, 'Social Register Handler Hatası'); // <-- DEĞİŞTİ
+        throw error;
     }
 };
 
-// === SOCIAL LOGIN HANDLER (GÜNCELLENDİ) ===
+// === SOCIAL LOGIN HANDLER ===
 export const socialLoginHandler = async (
     req: Request<{}, {}, SocialLoginInput['body']>,
     res: Response
@@ -293,11 +273,8 @@ export const socialLoginHandler = async (
                 code: 'ACCOUNT_MERGE_REQUIRED'
             });
         }
-        console.error('Social Login Handler Hatası:', error);
-        return res.status(500).json({
-            status: 'error',
-            message: 'Sunucu hatası. Lütfen tekrar deneyin.',
-        });
+        logger.error(error, 'Social Login Handler Hatası'); // <-- DEĞİŞTİ
+        throw error;
     }
 };
 
@@ -310,10 +287,8 @@ export const socialMergeHandler = async (
         const ipAddress = req.ip || 'unknown';
         const userAgent = req.headers['user-agent'] || 'unknown';
 
-        // Servis, her iki kimliği de doğrulayacak ve token döndürecek
         const tokens = await socialMergeService(req.body, ipAddress, userAgent, req.body.deviceId);
 
-        // Başarılı: Hesaplar birleştirildi ve "doğrulanmış" token'lar döndürüldü
         return res.status(200).json({
             status: 'success',
             message: 'Hesaplar başarıyla birleştirildi.',
@@ -328,21 +303,16 @@ export const socialMergeHandler = async (
             });
         }
         if (error.message === 'INVALID_CREDENTIALS') {
-            // Şifre yanlıştı VEYA e-posta bulunamadı
             return res.status(401).json({
                 status: 'error',
                 message: 'E-posta veya şifre hatalı. Birleştirme başarısız.',
             });
         }
-
-        // Beklenmedik bir hata
-        console.error('Social Merge Handler Hatası:', error);
-        return res.status(500).json({
-            status: 'error',
-            message: 'Sunucu hatası. Lütfen tekrar deneyin.',
-        });
+        logger.error(error, 'Social Merge Handler Hatası'); // <-- DEĞİŞTİ
+        throw error;
     }
 };
+
 // === YENİ REFRESH TOKEN HANDLER'I ===
 export const refreshTokenHandler = async (
     req: Request<{}, {}, RefreshInput['body']>,
@@ -352,10 +322,8 @@ export const refreshTokenHandler = async (
         const ipAddress = req.ip || 'unknown';
         const userAgent = req.headers['user-agent'] || 'unknown';
 
-        // Servis, eski token'ı doğrulayacak ve yeni bir set döndürecek
-        const tokens = await refreshTokenService(req.body.refreshToken, ipAddress, userAgent, req.body.deviceId);
+        const tokens = await refreshTokenService(req.body.refreshToken, req.body.deviceId, ipAddress, userAgent); // <-- Sıralama düzeltildi
 
-        // Başarılı: Yeni token seti
         return res.status(200).json({
             status: 'success',
             message: 'Token başarıyla yenilendi.',
@@ -369,36 +337,29 @@ export const refreshTokenHandler = async (
                 message: 'Geçersiz, süresi dolmuş veya kullanılmış refresh token.',
             });
         }
-
-        console.error('Refresh Token Handler Hatası:', error);
-        return res.status(500).json({
-            status: 'error',
-            message: 'Sunucu hatası.',
-        });
+        logger.error(error, 'Refresh Token Handler Hatası'); // <-- DEĞİŞTİ
+        throw error;
     }
 };
 
+// === LOGOUT HANDLER ===
 export const logoutUserHandler = async (req: Request<{}, {}, LogoutInput['body']>, res: Response) => {
     try {
         if (!req.user) {
             return res.status(403).json({ status: 'error', message: 'Yetkisiz erişim.' });
         }
-        const userId = req.user.sub; // checkJwt'den gelen 'userId'
-        const { deviceId } = req.body; // Zod'dan gelen 'deviceId'
+        const userId = req.user.sub;
+        const { deviceId } = req.body;
 
-        await logoutUserService(userId, deviceId); // <-- DEĞİŞTİ
+        await logoutUserService(userId, deviceId);
 
-        // Başarılı: Token'lar silindi
         return res.status(200).json({
             status: 'success',
             message: 'Başarıyla çıkış yapıldı.',
         });
 
     } catch (error: any) {
-        console.error('Logout Handler Hatası:', error);
-        return res.status(500).json({
-            status: 'error',
-            message: 'Sunucu hatası.',
-        });
+        logger.error(error, 'Logout Handler Hatası'); // <-- DEĞİŞTİ
+        throw error;
     }
 };

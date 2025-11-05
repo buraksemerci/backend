@@ -1,3 +1,4 @@
+// src/services/auth.service.ts
 import prisma from "../utils/prisma";
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -21,28 +22,18 @@ import { signTokens } from '../utils/jwt.utils';
 import {
     Prisma,
     PrismaClient,
-    UserExternalLogin // 'l' parametresinin tipini belirlemek için import ettik
+    UserExternalLogin
 } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
-
-// Referans için interface (artık explicit olarak kullanılmıyor)
-interface RegisterResult {
-    user: {
-        id: string;
-        email: string;
-    };
-    tokens: {
-        accessToken: string;
-        refreshToken: string;
-    };
-}
+import logger from '../utils/logger'; // <-- YENİ
+import { env } from '../utils/env'; // <-- YENİ
 
 // === REGISTER USER SERVICE ===
 export const registerUserService = async (
     input: RegisterInput['body'],
     ipAddress: string,
     userAgent: string,
-    deviceId: string // <-- EKLENDİ
+    deviceId: string
 ) => {
 
     // 1. Şifreyi Hash'le
@@ -67,7 +58,7 @@ export const registerUserService = async (
 
             // 4. Durum 2: "İşgal (Overwrite)"
             if (existingUser && !existingUser.isEmailVerified) {
-                console.log(`Akıllı Kayıt: ${existingUser.userId} ID'li doğrulanmamış hesap üzerine yazılıyor...`);
+                logger.info(`Akıllı Kayıt: ${existingUser.userId} ID'li doğrulanmamış hesap üzerine yazılıyor...`);
                 userId = existingUser.userId;
 
                 // 4a. ESKİ SAHTE profil verilerini SİL
@@ -75,10 +66,10 @@ export const registerUserService = async (
                 await tx.userGoalPart.deleteMany({ where: { userId } });
                 await tx.userAvailableWorkoutEquipment.deleteMany({ where: { userId } });
                 await tx.userWorkoutLocation.deleteMany({ where: { userId } });
-                try { await tx.userProfile.delete({ where: { userId } }); } catch (e) { }
-                try { await tx.userBody.delete({ where: { userId } }); } catch (e) { }
-                try { await tx.userGoal.delete({ where: { userId } }); } catch (e) { }
-                try { await tx.userSetting.delete({ where: { userId } }); } catch (e) { }
+                try { await tx.userProfile.delete({ where: { userId } }); } catch (e) { /* Hata yoksayılabilir */ }
+                try { await tx.userBody.delete({ where: { userId } }); } catch (e) { /* Hata yoksayılabilir */ }
+                try { await tx.userGoal.delete({ where: { userId } }); } catch (e) { /* Hata yoksayılabilir */ }
+                try { await tx.userSetting.delete({ where: { userId } }); } catch (e) { /* Hata yoksayılabilir */ }
 
                 // 4b. Ana User ve Şifresini GÜNCELLE
                 await tx.user.update({
@@ -96,30 +87,25 @@ export const registerUserService = async (
                 });
 
             } else {
-                // 5. Durum 3: "Temiz Kayıt" (UUID Düzeltmesi uygulandı)
-                console.log(`Temiz Kayıt: ${input.email} için yeni kullanıcı oluşturuluyor...`);
+                // 5. Durum 3: "Temiz Kayıt"
+                logger.info(`Temiz Kayıt: ${input.email} için yeni kullanıcı oluşturuluyor...`);
 
-                // === DÜZELTME BAŞLANGICI (UUID Çakışması) ===
-                // Adım 5a: ÖNCE User'ı oluştur (ID'yi veritabanı oluşturur)
                 const newUser = await tx.user.create({
                     data: {
                         email: input.email,
                         username: input.username,
                         isEmailVerified: false,
-                        // UserLocalCredential BLOKUNU BURADAN KALDIRDIK
                     },
                     select: { userId: true },
                 });
                 userId = newUser.userId;
 
-                // Adım 5b: ŞİMDİ UserLocalCredential'ı oluştur
                 await tx.userLocalCredential.create({
                     data: {
                         userId: userId,
                         passwordHash,
                     },
                 });
-                // === DÜZELTME SONU ===
             }
 
             // 6. YENİ ve GERÇEK profil verilerini oluştur
@@ -154,7 +140,7 @@ export const registerUserService = async (
                 });
             }
 
-            // 7. Doğrulama Kodu Oluştur ve Kaydet (Zorunlu IP/Agent ile)
+            // 7. Doğrulama Kodu
             const code = generateSixDigitCode();
             const hashedCode = await bcrypt.hash(code, 10);
             const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 dakika
@@ -176,11 +162,10 @@ export const registerUserService = async (
             // 9. JWT Oluştur
             const tokens = await signTokens(userId, false);
 
-            // 10. Refresh Token'ı Kaydet (Zorunlu IP/Agent ile)
+            // 10. Refresh Token'ı Kaydet
             const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
-            const expiresAtRT = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRATION_DAYS || '30') * 24 * 60 * 60 * 1000));
+            const expiresAtRT = new Date(Date.now() + (env.JWT_REFRESH_EXPIRATION_DAYS * 24 * 60 * 60 * 1000));
 
-            // --- DEĞİŞİKLİK ---
             await tx.refreshToken.deleteMany({ where: { userId, deviceId } });
             await tx.refreshToken.create({
                 data: {
@@ -189,10 +174,9 @@ export const registerUserService = async (
                     expiresAt: expiresAtRT,
                     createdByIP: ipAddress,
                     userAgent: userAgent,
-                    deviceId: deviceId // <-- EKLENDİ
+                    deviceId: deviceId
                 }
             });
-            // --- DEĞİŞİKLİK SONU ---
 
             return { user: { id: userId, email: input.email }, tokens };
         });
@@ -205,8 +189,8 @@ export const registerUserService = async (
                 throw new Error('CONFLICT');
             }
         }
-        console.error('Kayıt Transaction Hatası:', error);
-        throw new Error('Internal Server Error');
+        logger.error(error, 'Kayıt Transaction Hatası');
+        throw new Error('Internal Server Error'); // Bu, global error handler tarafından yakalanacak
     }
 };
 
@@ -215,11 +199,10 @@ export const loginUserService = async (
     input: LoginInput['body'],
     ipAddress: string,
     userAgent: string,
-    deviceId: string // <-- EKLENDİ
+    deviceId: string
 ) => {
     const { loginIdentifier, password } = input;
 
-    // 1. Kullanıcıyı bul
     const user = await prisma.user.findFirst({
         where: {
             OR: [
@@ -232,11 +215,11 @@ export const loginUserService = async (
         },
     });
 
-    // 2. Kontroller
     if (!user) {
         throw new Error('INVALID_CREDENTIALS');
     }
     if (!user.UserLocalCredential) {
+        // Bu, muhtemelen bir sosyal kayıt kullanıcısıdır, yerel şifresi yoktur.
         throw new Error('INVALID_CREDENTIALS');
     }
     const passwordMatch = await bcrypt.compare(
@@ -247,15 +230,12 @@ export const loginUserService = async (
         throw new Error('INVALID_CREDENTIALS');
     }
 
-    // 5. BAŞARILI
-    console.log(`Kullanıcı giriş yaptı: ${user.userId}, Doğrulanmış: ${user.isEmailVerified}`);
+    logger.info(`Kullanıcı giriş yaptı: ${user.userId}, Doğrulanmış: ${user.isEmailVerified}`);
     const tokens = await signTokens(user.userId, user.isEmailVerified);
 
-    // 6. Refresh Token'ı Kaydet
     const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
-    const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRATION_DAYS || '30') * 24 * 60 * 60 * 1000));
+    const expiresAt = new Date(Date.now() + (env.JWT_REFRESH_EXPIRATION_DAYS * 24 * 60 * 60 * 1000));
 
-    // --- DEĞİŞİKLİK ---
     await prisma.$transaction([
         prisma.refreshToken.deleteMany({ where: { userId: user.userId, deviceId } }),
         prisma.refreshToken.create({
@@ -265,11 +245,10 @@ export const loginUserService = async (
                 expiresAt: expiresAt,
                 createdByIP: ipAddress,
                 userAgent: userAgent,
-                deviceId: deviceId // <-- EKLENDİ
+                deviceId: deviceId
             }
         })
     ]);
-    // --- DEĞİŞİKLİK SONU ---
 
     return tokens;
 };
@@ -280,9 +259,8 @@ export const verifyEmailCodeService = async (
     code: string,
     ipAddress: string,
     userAgent: string,
-    deviceId: string // <-- EKLENDİ
+    deviceId: string
 ) => {
-    // 1. Kullanıcıyı ve token'ı bul
     const userWithToken = await prisma.user.findUnique({
         where: { userId },
         include: {
@@ -292,7 +270,6 @@ export const verifyEmailCodeService = async (
         },
     });
 
-    // 2. Kontroller
     const tokenRecord = userWithToken?.EmailVerificationToken[0];
     if (!tokenRecord || tokenRecord.expiresAt < new Date()) {
         throw new Error('INVALID_CODE');
@@ -305,7 +282,6 @@ export const verifyEmailCodeService = async (
         throw new Error('INVALID_CODE');
     }
 
-    // 5. BAŞARILI
     await prisma.$transaction(async (tx) => {
         await tx.user.update({
             where: { userId },
@@ -317,15 +293,12 @@ export const verifyEmailCodeService = async (
         });
     });
 
-    // 6. YENİ JWT'leri oluştur
-    console.log(`Kullanıcı doğrulandı: ${userId}`);
+    logger.info(`Kullanıcı doğrulandı: ${userId}`);
     const tokens = await signTokens(userId, true);
 
-    // 7. Yeni Refresh Token'ı Kaydet
     const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
-    const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRATION_DAYS || '30') * 24 * 60 * 60 * 1000));
+    const expiresAt = new Date(Date.now() + (env.JWT_REFRESH_EXPIRATION_DAYS * 24 * 60 * 60 * 1000));
 
-    // --- DEĞİŞİKLİK ---
     await prisma.$transaction([
         prisma.refreshToken.deleteMany({ where: { userId: userId, deviceId } }),
         prisma.refreshToken.create({
@@ -335,11 +308,10 @@ export const verifyEmailCodeService = async (
                 expiresAt: expiresAt,
                 createdByIP: ipAddress,
                 userAgent: userAgent,
-                deviceId: deviceId // <-- EKLENDİ
+                deviceId: deviceId
             }
         })
     ]);
-    // --- DEĞİŞİKLİK SONU ---
 
     return tokens;
 };
@@ -350,51 +322,36 @@ export const resendVerificationCodeService = async (
     ipAddress: string,
     userAgent: string
 ) => {
-    // 1. Kullanıcıyı bul
     const user = await prisma.user.findUnique({
         where: { userId },
         select: { email: true, isEmailVerified: true },
     });
 
-    // 2. Kontroller
     if (!user) {
-        throw new Error('User not found');
+        throw new Error('User not found'); // Bu global handler'a gidecek
     }
     if (user.isEmailVerified) {
         throw new Error('ALREADY_VERIFIED');
     }
 
-    // 4. BAŞARILI
     const code = generateSixDigitCode();
     const hashedCode = await bcrypt.hash(code, 10);
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
-    // 5. Atomik İşlem
-    try {
-        await prisma.$transaction(async (tx) => {
-            await tx.emailVerificationToken.deleteMany({ where: { userId } });
-            await tx.emailVerificationToken.create({
-                data: {
-                    userId,
-                    tokenHash: hashedCode,
-                    expiresAt,
-                    requestIP: ipAddress,
-                    userAgent: userAgent,
-                },
-            });
+    await prisma.$transaction(async (tx) => {
+        await tx.emailVerificationToken.deleteMany({ where: { userId } });
+        await tx.emailVerificationToken.create({
+            data: {
+                userId,
+                tokenHash: hashedCode,
+                expiresAt,
+                requestIP: ipAddress,
+                userAgent: userAgent,
+            },
         });
-    } catch (txError) {
-        console.error("Resend Code Transaction Hatası:", txError);
-        throw new Error("Veritabanı işlemi başarısız oldu.");
-    }
+    });
 
-    // 6. E-postayı GÖNDER
-    try {
-        await sendVerificationCode(user.email, code);
-    } catch (emailError) {
-        console.error("Resend Code - E-posta Gönderim Hatası:", emailError);
-        throw new Error('E-posta gönderilemedi.');
-    }
+    await sendVerificationCode(user.email, code);
     return;
 };
 
@@ -404,50 +361,35 @@ export const forgotPasswordService = async (
     ipAddress: string,
     userAgent: string
 ) => {
-    // 1. Kullanıcıyı bul
     const user = await prisma.user.findUnique({
         where: { email },
     });
 
-    // 2. GÜVENLİK KURALI
     if (!user || !user.isEmailVerified) {
-        console.log(`[Forgot PWD]: Sessiz çıkış (Kullanıcı bulunamadı veya doğrulanmamış): ${email}`);
+        logger.warn(`[Forgot PWD]: Sessiz çıkış (Kullanıcı bulunamadı veya doğrulanmamış): ${email}`);
         return;
     }
 
-    // 3. BAŞARILI
     const code = generateSixDigitCode();
     const hashedCode = await bcrypt.hash(code, 10);
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 dakika
 
-    // 4. Atomik İşlem
-    try {
-        await prisma.$transaction(async (tx) => {
-            await tx.passwordResetToken.deleteMany({
-                where: { userId: user.userId },
-            });
-            await tx.passwordResetToken.create({
-                data: {
-                    userId: user.userId,
-                    tokenHash: hashedCode,
-                    expiresAt,
-                    requestIP: ipAddress,
-                    userAgent: userAgent,
-                },
-            });
+    await prisma.$transaction(async (tx) => {
+        await tx.passwordResetToken.deleteMany({
+            where: { userId: user.userId },
         });
-    } catch (txError) {
-        console.error("Forgot PWD Transaction Hatası:", txError);
-        throw new Error('Veritabanı işlemi başarısız oldu.');
-    }
+        await tx.passwordResetToken.create({
+            data: {
+                userId: user.userId,
+                tokenHash: hashedCode,
+                expiresAt,
+                requestIP: ipAddress,
+                userAgent: userAgent,
+            },
+        });
+    });
 
-    // 5. E-postayı GÖNDER
-    try {
-        await sendPasswordResetCode(user.email, code);
-    } catch (emailError) {
-        console.error("Forgot PWD - E-posta Gönderim Hatası:", emailError);
-        throw new Error('E-posta gönderilemedi.');
-    }
+    await sendPasswordResetCode(user.email, code);
     return;
 };
 
@@ -455,7 +397,6 @@ export const forgotPasswordService = async (
 export const resetPasswordService = async (input: ResetPasswordInput['body']) => {
     const { email, code, newPassword } = input;
 
-    // 1. Kullanıcıyı ve geçerli token'ı bul
     const userWithToken = await prisma.user.findUnique({
         where: { email },
         include: {
@@ -469,7 +410,6 @@ export const resetPasswordService = async (input: ResetPasswordInput['body']) =>
         },
     });
 
-    // 2. Kontroller
     const tokenRecord = userWithToken?.PasswordResetToken[0];
     if (!tokenRecord) {
         throw new Error('INVALID_CODE');
@@ -482,27 +422,20 @@ export const resetPasswordService = async (input: ResetPasswordInput['body']) =>
         throw new Error('NO_LOCAL_ACCOUNT');
     }
 
-    // 6. Yeni şifreyi hash'le
     const newPasswordHash = await bcrypt.hash(newPassword, 12);
 
-    // 7. Atomik İşlem
-    try {
-        await prisma.$transaction(async (tx) => {
-            await tx.userLocalCredential.update({
-                where: { userId: userWithToken.userId },
-                data: { passwordHash: newPasswordHash },
-            });
-            await tx.passwordResetToken.update({
-                where: { resetTokenId: tokenRecord.resetTokenId },
-                data: { isUsed: true },
-            });
+    await prisma.$transaction(async (tx) => {
+        await tx.userLocalCredential.update({
+            where: { userId: userWithToken.userId },
+            data: { passwordHash: newPasswordHash },
         });
-    } catch (txError) {
-        console.error("Reset PWD Transaction Hatası:", txError);
-        throw new Error('Veritabanı işlemi başarısız oldu.');
-    }
+        await tx.passwordResetToken.update({
+            where: { resetTokenId: tokenRecord.resetTokenId },
+            data: { isUsed: true },
+        });
+    });
 
-    console.log(`Kullanıcı şifresi sıfırlandı: ${userWithToken.userId}`);
+    logger.info(`Kullanıcı şifresi sıfırlandı: ${userWithToken.userId}`);
     return;
 };
 
@@ -511,10 +444,9 @@ export const socialRegisterService = async (
     input: SocialRegisterInput['body'],
     ipAddress: string,
     userAgent: string,
-    deviceId: string // <-- EKLENDİ
+    deviceId: string
 ) => {
 
-    // 1. Gelen Token'ı Doğrula
     let providerData: {
         email: string;
         externalId: string;
@@ -529,38 +461,32 @@ export const socialRegisterService = async (
         throw new Error('Provider not yet supported');
     }
 
-    // 2. E-postayı veritabanında ara
     const existingUser = await prisma.user.findUnique({
         where: { email: providerData.email },
         include: { UserLocalCredential: true },
     });
 
-    // 3. Durum 1: "Çakışma"
     if (existingUser && existingUser.isEmailVerified && existingUser.UserLocalCredential) {
         throw new Error('CONFLICT');
     }
 
-    // --- Buradan sonrası Atomik (Transaction) olmalı ---
     try {
         const tokens = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             let userId: string;
 
-            // 4. Durum 2: "Dolaylı Doğrulama / Overwrite"
             if (existingUser && !existingUser.isEmailVerified) {
-                console.log(`Sosyal Kayıt (Overwrite): ${existingUser.userId} ID'li doğrulanmamış hesap üzerine yazılıyor...`);
+                logger.info(`Sosyal Kayıt (Overwrite): ${existingUser.userId} ID'li doğrulanmamış hesap üzerine yazılıyor...`);
                 userId = existingUser.userId;
 
-                // 4a. ESKİ SAHTE profil verilerini SİL
                 await tx.userHealthLimitation.deleteMany({ where: { userId } });
                 await tx.userGoalPart.deleteMany({ where: { userId } });
                 await tx.userAvailableWorkoutEquipment.deleteMany({ where: { userId } });
                 await tx.userWorkoutLocation.deleteMany({ where: { userId } });
-                try { await tx.userProfile.delete({ where: { userId } }); } catch (e) { }
-                try { await tx.userBody.delete({ where: { userId } }); } catch (e) { }
-                try { await tx.userGoal.delete({ where: { userId } }); } catch (e) { }
-                try { await tx.userSetting.delete({ where: { userId } }); } catch (e) { }
+                try { await tx.userProfile.delete({ where: { userId } }); } catch (e) { /* Hata yoksayılabilir */ }
+                try { await tx.userBody.delete({ where: { userId } }); } catch (e) { /* Hata yoksayılabilir */ }
+                try { await tx.userGoal.delete({ where: { userId } }); } catch (e) { /* Hata yoksayılabilir */ }
+                try { await tx.userSetting.delete({ where: { userId } }); } catch (e) { /* Hata yoksayılabilir */ }
 
-                // 4b. Ana User'ı GÜNCELLE
                 await tx.user.update({
                     where: { userId },
                     data: {
@@ -570,10 +496,8 @@ export const socialRegisterService = async (
                 });
 
             } else {
-                // 5. Durum 3: "Temiz Kayıt" (UUID Düzeltmesi uygulandı)
-                console.log(`Sosyal Kayıt (Temiz): ${providerData.email} için yeni kullanıcı oluşturuluyor...`);
+                logger.info(`Sosyal Kayıt (Temiz): ${providerData.email} için yeni kullanıcı oluşturuluyor...`);
 
-                // Adım 5a: ÖNCE User'ı oluştur
                 const newUser = await tx.user.create({
                     data: {
                         email: providerData.email,
@@ -583,16 +507,13 @@ export const socialRegisterService = async (
                     select: { userId: true },
                 });
                 userId = newUser.userId;
-                // Adım 5b: Sosyal kayıtta UserLocalCredential OLUŞTURULMAZ
             }
 
-            // 6. YENİ ve GERÇEK profil verilerini oluştur
             await tx.userProfile.create({ data: { userId, ...input.profile } });
             await tx.userBody.create({ data: { userId, ...input.body } });
             await tx.userGoal.create({ data: { userId, ...input.goal } });
             await tx.userSetting.create({ data: { userId, ...input.settings } });
 
-            // 6b. M:N Veriler
             await tx.userGoalPart.createMany({
                 data: input.targetBodyPartIds.map((id) => ({ userId, goalBodyPartId: id })),
             });
@@ -608,7 +529,6 @@ export const socialRegisterService = async (
                 });
             }
 
-            // 7. Sosyal Bağlantıyı (ExternalLogin) Oluştur
             await tx.userExternalLogin.upsert({
                 where: {
                     loginProvider_providerKey: {
@@ -626,14 +546,10 @@ export const socialRegisterService = async (
                 },
             });
 
-            // 8. JWT Oluştur
             const tokens = await signTokens(userId, true);
-
-            // 9. Refresh Token'ı Kaydet
             const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
-            const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRATION_DAYS || '30') * 24 * 60 * 60 * 1000));
+            const expiresAt = new Date(Date.now() + (env.JWT_REFRESH_EXPIRATION_DAYS * 24 * 60 * 60 * 1000));
 
-            // --- DEĞİŞİKLİK ---
             await tx.refreshToken.deleteMany({ where: { userId, deviceId } });
             await tx.refreshToken.create({
                 data: {
@@ -642,10 +558,9 @@ export const socialRegisterService = async (
                     expiresAt: expiresAt,
                     createdByIP: ipAddress,
                     userAgent: userAgent,
-                    deviceId: deviceId // <-- EKLENDİ
+                    deviceId: deviceId
                 }
             });
-            // --- DEĞİŞİKLİK SONU ---
 
             return tokens;
         });
@@ -659,7 +574,7 @@ export const socialRegisterService = async (
         if (error instanceof Error && (error.message === 'TOKEN_VERIFICATION_FAILED' || error.message === 'CONFLICT')) {
             throw error;
         }
-        console.error('Sosyal Kayıt Transaction Hatası:', error);
+        logger.error(error, 'Sosyal Kayıt Transaction Hatası');
         throw new Error('Internal Server Error');
     }
 };
@@ -669,10 +584,9 @@ export const socialLoginService = async (
     input: SocialLoginInput['body'],
     ipAddress: string,
     userAgent: string,
-    deviceId: string // <-- EKLENDİ
+    deviceId: string
 ) => {
 
-    // 1. Gelen Token'ı Doğrula
     let providerData: {
         email: string;
         externalId: string;
@@ -687,7 +601,6 @@ export const socialLoginService = async (
         throw new Error('Provider not yet supported');
     }
 
-    // 2. Kullanıcıyı bul (Provider ID ile)
     let user = await prisma.user.findFirst({
         where: {
             UserExternalLogin: {
@@ -699,17 +612,16 @@ export const socialLoginService = async (
         },
         include: {
             UserLocalCredential: true,
-            UserExternalLogin: true, // Hata düzeltmesi eklendi
+            UserExternalLogin: true,
         },
     });
 
-    // 3. Durum 1: Bulunamadı -> E-posta ile ara
     if (!user) {
         const userByEmail = await prisma.user.findUnique({
             where: { email: providerData.email },
             include: {
                 UserLocalCredential: true,
-                UserExternalLogin: true, // Hata düzeltmesi eklendi
+                UserExternalLogin: true,
             },
         });
 
@@ -719,22 +631,18 @@ export const socialLoginService = async (
         user = userByEmail;
     }
 
-    // 4. Durum 2: "Hesap Birleştirme Gerekli"
     if (user.isEmailVerified && user.UserLocalCredential &&
-        !user.UserExternalLogin.some((l: UserExternalLogin) => l.loginProvider === input.provider)) { // l: any hatası düzeltildi
+        !user.UserExternalLogin.some((l: UserExternalLogin) => l.loginProvider === input.provider)) {
         throw new Error('ACCOUNT_MERGE_REQUIRED');
     }
 
-    // 5. Durum 3: "Dolaylı Birleştirme / Giriş"
-    console.log(`Sosyal kullanıcı giriş yaptı: ${user.userId}, Doğrulanmış: ${user.isEmailVerified}`);
+    logger.info(`Sosyal kullanıcı giriş yaptı: ${user.userId}, Doğrulanmış: ${user.isEmailVerified}`);
 
-    // 6. Atomik İşlem
     const tokens = await signTokens(user.userId, true);
     const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
-    const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRATION_DAYS || '30') * 24 * 60 * 60 * 1000));
+    const expiresAt = new Date(Date.now() + (env.JWT_REFRESH_EXPIRATION_DAYS * 24 * 60 * 60 * 1000));
 
     await prisma.$transaction(async (tx) => {
-        // --- DEĞİŞİKLİK ---
         await tx.refreshToken.deleteMany({ where: { userId: user.userId, deviceId } });
         await tx.refreshToken.create({
             data: {
@@ -743,12 +651,10 @@ export const socialLoginService = async (
                 expiresAt: expiresAt,
                 createdByIP: ipAddress,
                 userAgent: userAgent,
-                deviceId: deviceId // <-- EKLENDİ
+                deviceId: deviceId
             }
         });
-        // --- DEĞİŞİKLİK SONU ---
 
-        // Dolaylı doğrulama
         if (!user.isEmailVerified) {
             await tx.user.update({
                 where: { userId: user.userId },
@@ -756,8 +662,7 @@ export const socialLoginService = async (
             });
         }
 
-        // Dolaylı birleştirme
-        if (!user.UserExternalLogin.some((l: UserExternalLogin) => l.loginProvider === input.provider)) { // l: any hatası düzeltildi
+        if (!user.UserExternalLogin.some((l: UserExternalLogin) => l.loginProvider === input.provider)) {
             await tx.userExternalLogin.create({
                 data: {
                     userId: user.userId,
@@ -776,10 +681,9 @@ export const socialMergeService = async (
     input: SocialMergeInput['body'],
     ipAddress: string,
     userAgent: string,
-    deviceId: string // <-- EKLENDİ
+    deviceId: string
 ) => {
 
-    // 1. Sosyal Token'ı Doğrula (Google vb.)
     let providerData: {
         email: string;
         externalId: string;
@@ -795,18 +699,15 @@ export const socialMergeService = async (
         throw new Error('Provider not yet supported');
     }
 
-    // 2. Kullanıcıyı e-posta ile bul (ŞİFRESİNİ ALARAK)
     const user = await prisma.user.findUnique({
         where: { email: providerData.email },
         include: { UserLocalCredential: true }
     });
 
-    // 3. Kontrol 1: Kullanıcı bulunamadı VEYA şifresi yok
     if (!user || !user.UserLocalCredential) {
         throw new Error('INVALID_CREDENTIALS');
     }
 
-    // 4. Kontrol 2: Şifre Eşleşiyor mu?
     const passwordMatch = await bcrypt.compare(
         input.password,
         user.UserLocalCredential.passwordHash
@@ -816,16 +717,13 @@ export const socialMergeService = async (
         throw new Error('INVALID_CREDENTIALS');
     }
 
-    // 5. BAŞARILI: Hem sosyal token hem de şifre doğru.
-    console.log(`Hesap birleştiriliyor: ${user.userId} -> ${input.provider}`);
+    logger.info(`Hesap birleştiriliyor: ${user.userId} -> ${input.provider}`);
 
-    // 6. Atomik İşlem: Token'ları kaydet, kullanıcıyı doğrula, hesabı bağla
     const tokens = await signTokens(user.userId, true);
     const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
-    const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRATION_DAYS || '30') * 24 * 60 * 60 * 1000));
+    const expiresAt = new Date(Date.now() + (env.JWT_REFRESH_EXPIRATION_DAYS * 24 * 60 * 60 * 1000));
 
     await prisma.$transaction(async (tx) => {
-        // --- DEĞİŞİKLİK ---
         await tx.refreshToken.deleteMany({ where: { userId: user.userId, deviceId } });
         await tx.refreshToken.create({
             data: {
@@ -834,12 +732,10 @@ export const socialMergeService = async (
                 expiresAt: expiresAt,
                 createdByIP: ipAddress,
                 userAgent: userAgent,
-                deviceId: deviceId // <-- EKLENDİ
+                deviceId: deviceId
             }
         });
-        // --- DEĞİŞİKLİK SONU ---
 
-        // 6b. Kullanıcıyı doğrulanmış yap
         if (!user.isEmailVerified) {
             await tx.user.update({
                 where: { userId: user.userId },
@@ -847,7 +743,6 @@ export const socialMergeService = async (
             });
         }
 
-        // 6c. Sosyal bağlantıyı ekle
         await tx.userExternalLogin.upsert({
             where: {
                 loginProvider_providerKey: {
@@ -864,45 +759,40 @@ export const socialMergeService = async (
         });
     });
 
-    // 7. Yeni, "doğrulanmış" token'ları döndür
     return tokens;
 };
 
-// === YENİ REFRESH TOKEN SERVİSİ ===
+// === YENİ REFRESH TOKEN SERVİSİ (BUG DÜZELTİLDİ) ===
 export const refreshTokenService = async (
     refreshToken: string,
-    deviceId: string, // <-- EKLENDİ
+    deviceId: string,
     ipAddress: string,
     userAgent: string
 ) => {
-    // 1. JWT_SECRET'in varlığını kontrol et
-    const JWT_SECRET = process.env.JWT_SECRET;
-    if (!JWT_SECRET) {
-        throw new Error('JWT_SECRET tanımlanmamış.');
-    }
 
-    // 2. Gelen Refresh Token'ı doğrula (Süre ve İmza)
+    // 1. JWT_SECRET'in varlığını kontrol et (artık env.ts'den geliyor)
+    const JWT_SECRET = env.JWT_SECRET;
+
+    // 2. Gelen Refresh Token'ı doğrula
     let payload: { sub: string };
     try {
         payload = jwt.verify(refreshToken, JWT_SECRET) as { sub: string };
     } catch (error) {
-        // Token süresi dolmuş veya imzası geçersiz
+        logger.warn(error, 'Geçersiz refresh token (verify hatası)');
         throw new Error('INVALID_REFRESH_TOKEN');
     }
 
     const userId = payload.sub;
 
     // 3. Token'ı Veritabanında Ara
-    // --- DEĞİŞİKLİK ---
     const tokenRecord = await prisma.refreshToken.findFirst({
         where: {
             userId: userId,
-            deviceId: deviceId, // <-- EKLENDİ
+            deviceId: deviceId,
             isUsed: false,
-            expiresAt: { gt: new Date() }, // Süresi dolmamış
+            expiresAt: { gt: new Date() },
         },
     });
-    // --- DEĞİŞİKLİK SONU ---
 
     if (!tokenRecord) {
         throw new Error('INVALID_REFRESH_TOKEN');
@@ -911,17 +801,12 @@ export const refreshTokenService = async (
     // 4. Gelen Token, Veritabanındaki Hash ile Eşleşiyor mu?
     const tokenMatch = await bcrypt.compare(refreshToken, tokenRecord.tokenHash);
     if (!tokenMatch) {
-        // Bu, çalınmış bir token'ın yeniden kullanılma girişimi olabilir
         throw new Error('INVALID_REFRESH_TOKEN');
     }
 
     // 5. BAŞARILI: Refresh Token geçerli.
-    // Güvenlik için "Token Rotation" (Token Döndürme) uyguluyoruz.
-    // Yeni bir Access Token VE YENİ BİR REFRESH TOKEN oluşturacağız.
+    logger.info(`Token yenileniyor: ${userId}, Cihaz: ${deviceId}`);
 
-    console.log(`Token yenileniyor: ${userId}`);
-
-    // Kullanıcının 'isEmailVerified' durumunu al
     const user = await prisma.user.findUnique({
         where: { userId },
         select: { isEmailVerified: true }
@@ -933,17 +818,12 @@ export const refreshTokenService = async (
     // 6. Yeni token setini oluştur
     const newTokens = await signTokens(userId, user.isEmailVerified);
     const newRefreshTokenHash = await bcrypt.hash(newTokens.refreshToken, 10);
-    const newExpiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRATION_DAYS || '30') * 24 * 60 * 60 * 1000));
+    const newExpiresAt = new Date(Date.now() + (env.JWT_REFRESH_EXPIRATION_DAYS * 24 * 60 * 60 * 1000));
 
-    // 7. Atomik İşlem: ESKİ token'ı SİL, YENİ token'ı EKLE
     // 7. Atomik İşlem: ESKİ token'ı SİL, YENİ token'ı EKLE
     await prisma.$transaction(async (tx) => {
-
-        // --- DEĞİŞİKLİK BURADA ---
-        // Önceki 'update' ve 'create' yerine, 'login' ile tutarlı
-        // 'deleteMany' ve 'create' kullanıyoruz. Bu, '@@unique' kuralını korur.
-
-        // 1. Bu cihaza ait mevcut (kullanılmış ve süresi dolmuş olabilecek) token'ları sil
+        // 1. Bu cihaza ait mevcut token'ları sil (veya 'isUsed' yap)
+        // 'deleteMany' kullanmak '@@unique' kuralı için daha güvenlidir.
         await tx.refreshToken.deleteMany({
             where: {
                 userId: userId,
@@ -962,7 +842,6 @@ export const refreshTokenService = async (
                 deviceId: deviceId
             }
         });
-        // --- DEĞİŞİKLİK SONU ---
     });
 
     // 8. Yeni token setini döndür
@@ -970,16 +849,14 @@ export const refreshTokenService = async (
 };
 
 // === YENİ LOGOUT SERVİSİ ===
-export const logoutUserService = async (userId: string, deviceId: string) => { // <-- İMZA DEĞİŞTİ
-    // Plan: Kullanıcının sadece bu cihaza ait refresh token'ını sil.
-    // --- İÇERİK DEĞİŞTİ ---
+export const logoutUserService = async (userId: string, deviceId: string) => {
     await prisma.refreshToken.deleteMany({
         where: {
             userId: userId,
-            deviceId: deviceId // <-- Sadece bu cihazı sil
+            deviceId: deviceId // Sadece bu cihazı sil
         },
     });
 
-    console.log(`Kullanıcı çıkış yaptı (cihaz: ${deviceId}): ${userId}`);
+    logger.info(`Kullanıcı çıkış yaptı (cihaz: ${deviceId}): ${userId}`);
     return;
 };

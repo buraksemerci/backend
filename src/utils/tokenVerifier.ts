@@ -1,10 +1,14 @@
+// src/utils/tokenVerifier.ts
 import { OAuth2Client } from 'google-auth-library';
+import { env } from './env'; // <-- YENİ
+import logger from './logger'; // <-- YENİ
 
-// 1. Google Client ID'nizi .env dosyasından alın
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+// 1. Google Client ID'nizi (doğrulanmış env'den) alın
+const GOOGLE_CLIENT_ID = env.GOOGLE_CLIENT_ID;
 
 if (!GOOGLE_CLIENT_ID) {
-    console.warn(
+    // Bu aslında env.ts sayesinde hiç çalışmayacak, ama önlem olarak kalsın
+    logger.warn(
         '[TokenVerifier] UYARI: GOOGLE_CLIENT_ID .env dosyasında eksik. Google ile doğrulama çalışmayacak.'
     );
 }
@@ -48,7 +52,7 @@ export const verifyGoogleToken = async (token: string) => {
         };
 
     } catch (error) {
-        console.error('[TokenVerifier] Google token doğrulama hatası:', error);
+        logger.error(error, '[TokenVerifier] Google token doğrulama hatası:'); // <-- DEĞİŞTİ
         // Hatanın controller tarafından yakalanabilmesi için fırlat
         throw new Error('TOKEN_VERIFICATION_FAILED');
     }
