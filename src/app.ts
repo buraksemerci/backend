@@ -1,4 +1,4 @@
-// src/app.ts
+// Dosya: src/app.ts
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -14,58 +14,62 @@ const app = express();
 
 app.set('trust proxy', 1);
 
-// Middleware'ler
+// Middlewares
 app.use(express.json());
 app.use(cors());
 
-// --- YENİ Logger Middleware ---
+// --- NEW Logger Middleware ---
 app.use(pinoHttp({ logger }));
 
-// Basit bir "health check" endpoint'i
+// Simple health check endpoint
 app.get('/health', (req, res) => {
     res.status(200).send('API is healthy and running!');
 });
 
-// === ANA API YÖNLENDİRMESİ ===
+// === MAIN API ROUTING ===
 app.use('/api/v1', apiRouter);
 
-// --- YENİ GLOBAL HATA YÖNETİCİSİ (ERROR HANDLER) ---
-// (Express 5, async hataları otomatik olarak buraya yönlendirir)
+// --- NEW GLOBAL ERROR HANDLER ---
+// (Express 5 routes async errors here automatically)
 app.use((error: Error, req: Request, res: Response, next: NextFunction) => {
-    logger.error(error, `İstek ${req.method} ${req.path} başarısız oldu`);
+    logger.error(error, `Request ${req.method} ${req.path} failed`);
 
-    // 1. Zod (Validasyon) Hatalarını Yakala
+    // 1. Catch Zod (Validation) Errors
     if (error instanceof ZodError) {
         return res.status(400).json({
             status: 'error',
-            message: 'Geçersiz istek verisi.',
+            code: 'VALIDATION_FAILED',
             errors: error.issues.map((issue) => ({
                 path: issue.path.join('.'),
-                message: issue.message,
+                code: issue.code, // Send the Zod error code (e.g., "too_small")
             })),
         });
     }
 
-    // 2. Prisma (Veritabanı) Hatalarını Yakala
+    // 2. Catch Prisma (Database) Errors
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
             return res.status(409).json({
                 status: 'error',
-                message: 'Veri çakışması (örn: bu email zaten kullanımda).',
-                meta: error.meta,
+                code: 'DB_UNIQUE_CONSTRAINT_FAILED',
+                // Optionally send which fields caused the conflict
+                meta: {
+                    target: (error.meta as any)?.target,
+                },
             });
         }
         return res.status(500).json({
             status: 'error',
-            message: 'Veritabanı hatası.',
-            code: error.code,
+            code: 'DB_ERROR',
+            message: `Prisma error code: ${error.code}`,
         });
     }
 
-    // 3. Diğer tüm beklenmedik hatalar
+    // 3. All other unexpected errors
     return res.status(500).json({
         status: 'error',
-        message: 'Sunucuda beklenmedik bir hata oluştu.',
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'An unexpected server error occurred.',
     });
 });
 

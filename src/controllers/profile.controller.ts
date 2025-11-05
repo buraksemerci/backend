@@ -1,19 +1,17 @@
-// src/controllers/profile.controller.ts
+// Dosya: src/controllers/profile.controller.ts
 import { Request, Response } from 'express';
 import { getMyProfileService } from '../services/profile.service';
-import logger from '../utils/logger'; // <-- YENİ
+import logger from '../utils/logger';
 
 /**
- * Giriş yapmış kullanıcının profil verilerini getirir
+ * Fetches the profile data for the logged-in user
  */
 export const getMyProfileHandler = async (req: Request, res: Response) => {
     try {
-        // --- DEĞİŞİKLİK ---
         if (!req.user) {
-            return res.status(403).json({ status: 'error', message: 'Yetkisiz erişim.' });
+            return res.status(403).json({ status: 'error', code: 'AUTH_UNAUTHORIZED' });
         }
-        const userId = req.user.sub; // checkJwt middleware'inden gelir
-        // --- DEĞİŞİKLİK SONU ---
+        const userId = req.user.sub; // Comes from checkJwt middleware
 
         const profileData = await getMyProfileService(userId);
 
@@ -26,11 +24,11 @@ export const getMyProfileHandler = async (req: Request, res: Response) => {
         if (error.message === 'USER_NOT_FOUND') {
             return res.status(404).json({
                 status: 'error',
-                message: 'Kullanıcı bulunamadı.',
+                code: 'PROFILE_USER_NOT_FOUND',
             });
         }
 
-        logger.error(error, 'Get My Profile Handler Hatası'); // <-- DEĞİŞTİ
+        logger.error(error, 'Get My Profile Handler Error');
         throw error;
     }
 };

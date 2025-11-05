@@ -1,30 +1,30 @@
-// src/utils/env.ts
+// Dosya: src/utils/env.ts
 import { z } from 'zod';
 
-// .env dosyamızdaki tüm değişkenler için bir şema tanımlıyoruz.
+// We define a schema for all our environment variables from the .env file.
 const envSchema = z.object({
-    // Sunucu
+    // Server
     PORT: z.coerce.number().default(5000),
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 
-    // Veritabanı
-    DATABASE_URL: z.string().min(1, 'DATABASE_URL zorunludur.'),
+    // Database
+    DATABASE_URL: z.string().min(1, 'DATABASE_URL is required.'),
 
     // JWT
-    JWT_SECRET: z.string().min(1, 'JWT_SECRET zorunludur.'),
+    JWT_SECRET: z.string().min(1, 'JWT_SECRET is required.'),
     JWT_REFRESH_EXPIRATION_DAYS: z.coerce.number().default(30),
 
     // Google Auth
-    GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID zorunludur.'),
+    GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID is required.'),
 
     // Email (SMTP)
-    EMAIL_HOST: z.string().min(1, 'EMAIL_HOST zorunludur.'),
+    EMAIL_HOST: z.string().min(1, 'EMAIL_HOST is required.'),
     EMAIL_PORT: z.coerce.number().default(587),
-    EMAIL_USER: z.string().min(1, 'EMAIL_USER zorunludur.'),
-    EMAIL_PASS: z.string().min(1, 'EMAIL_PASS zorunludur.'),
-    EMAIL_FROM: z.string().min(1, 'EMAIL_FROM zorunludur.'),
+    EMAIL_USER: z.string().min(1, 'EMAIL_USER is required.'),
+    EMAIL_PASS: z.string().min(1, 'EMAIL_PASS is required.'),
+    EMAIL_FROM: z.string().min(1, 'EMAIL_FROM is required.'),
 });
 
-// process.env'yi bu şemaya göre doğrula
-// 'safeParse' yerine 'parse' kullanıyoruz ki eksik değişken varsa uygulama BAŞLAMASIN.
+// Validate process.env against this schema
+// We use 'parse' instead of 'safeParse' so that the app FAILS TO START if variables are missing.
 export const env = envSchema.parse(process.env);

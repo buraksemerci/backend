@@ -1,15 +1,16 @@
+// Dosya: src/services/profile.service.ts
 import prisma from '../utils/prisma';
 import logger from '../utils/logger';
 
 /**
- * Giriş yapmış kullanıcının tüm profil verilerini getirir.
- * (Temel User bilgisi, 1:1 Profil, Vücut, Hedef, Ayarlar ve M:N ilişkileri)
- * @param {string} userId - JWT'den gelen kullanıcı ID'si
+ * Fetches all profile data for the logged-in user.
+ * (Base User info, 1:1 Profile, Body, Goal, Settings, and M:N relations)
+ * @param {string} userId - The user ID from the JWT
  */
 export const getMyProfileService = async (userId: string) => {
 
-    // --- 1. Adım: Kullanıcının tercih ettiği dili al ---
-    // (veya varsayılan olarak 'tr' kullan)
+    // --- Step 1: Get the user's preferred language ---
+    // (or default to 'tr')
     let languageCode = 'tr';
     try {
         const settings = await prisma.userSetting.findUnique({
@@ -20,34 +21,34 @@ export const getMyProfileService = async (userId: string) => {
             languageCode = settings.preferredLanguage;
         }
     } catch (e) {
-        logger.warn(e, `Kullanıcı ${userId} için dil ayarı bulunamadı, varsayılan 'tr' kullanılacak.`);
+        logger.warn(e, `Could not find language setting for user ${userId}, defaulting to 'tr'.`);
     }
 
-    // --- 2. Adım: Tüm veriyi kullanıcının diline göre getir ---
+    // --- Step 2: Fetch all data based on the user's language ---
     const userProfile = await prisma.user.findUnique({
         where: { userId },
         select: {
-            // Temel User verileri
+            // Base User data
             userId: true,
             email: true,
             username: true,
             isEmailVerified: true,
             createdAt: true,
 
-            // 1:1 İlişkili veriler (Bunlar değişmedi)
-            Profile: true, // UserProfile tablosu
-            Body: true,    // UserBody tablosu
-            Goal: true,    // UserGoal tablosu
-            Setting: true, // UserSetting tablosu
+            // 1:1 Related data (These haven't changed)
+            Profile: true, // UserProfile table
+            Body: true,    // UserBody table
+            Goal: true,    // UserGoal table
+            Setting: true, // UserSetting table
 
-            // --- 3. Adım: M:N İlişkili veriler (YENİDEN YAZILDI) ---
-            // Artık 'name' alanı için '...Translation' tablosuna bakıyoruz
+            // --- Step 3: M:N Related data (REWRITTEN) ---
+            // Now looks at '...Translation' table for 'name'
             HealthLimitations: {
                 select: {
                     HealthLimitation: {
                         select: {
                             healthLimitationId: true,
-                            // 'translations' ilişkisinden DİLE GÖRE FİLTRELE
+                            // FILTER by language from the 'translations' relation
                             translations: {
                                 where: { languageCode: languageCode },
                                 select: { name: true, description: true }
@@ -98,16 +99,16 @@ export const getMyProfileService = async (userId: string) => {
         },
     });
 
-    // 2. Kullanıcı bulunamazsa
+    // 2. If user not found
     if (!userProfile) {
         throw new Error('USER_NOT_FOUND');
     }
 
-    // --- 4. Adım: Veriyi temizle (M:N verilerini düz bir diziye çevir) ---
-    // (Artık karmaşık 'translations' dizisini düzeltmemiz gerekiyor)
+    // --- Step 4: Clean up the data (flatten M:N data into a simple array) ---
+    // (Now we need to fix the complex 'translations' array)
     const formattedProfile = {
         ...userProfile,
-        // Düzeltilmiş format: { id: 1, name: "Türkçe İsim" }
+        // Corrected format: { id: 1, name: "Name in User's Language" }
         HealthLimitations: userProfile.HealthLimitations.map(item => ({
             id: item.HealthLimitation.healthLimitationId,
             name: item.HealthLimitation.translations[0]?.name || 'N/A',
@@ -133,4 +134,4 @@ export const getMyProfileService = async (userId: string) => {
     return formattedProfile;
 };
 
-// TODO: Gelecekte 'updateMyProfileService' buraya eklenecek
+// TODO: 'updateMyProfileService' will be added here in the future

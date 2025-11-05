@@ -1,31 +1,30 @@
+// Dosya: src/middlewares/rateLimiter.ts
 import { rateLimit } from 'express-rate-limit';
 
 /**
- * Public endpoint'lere (Ekipman listesi vb.) yönelik
- * kaba kuvvet (brute-force) veya spam isteklerini önler.
- * Kural: Her IP, bu endpoint'lere 15 dakikada 1000 istek atabilir.
+ * Prevents brute-force or spam requests to public endpoints (Equipment list, etc.)
+ * Rule: 1000 requests per 15 minutes per IP.
  */
 export const publicApiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 dakika
-    max: 1000, // Her IP için 15 dakikada 1000 istek
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 1000, // 1000 requests per IP per 15 min
     message: {
         status: 'error',
-        message: 'Çok fazla istekte bulundunuz. Lütfen 15 dakika sonra tekrar deneyin.',
+        code: 'COMMON_TOO_MANY_REQUESTS',
     },
-    standardHeaders: true, // "RateLimit-*" başlıklarını yanıta ekle
-    legacyHeaders: false, // "X-RateLimit-*" başlıklarını devre dışı bırak
+    standardHeaders: true, // Add "RateLimit-*" headers to response
+    legacyHeaders: false, // Disable "X-RateLimit-*" headers
 });
 /**
- * Auth endpoint'lerine (login, register, forgot-password) yönelik
- * kaba kuvvet (brute-force) saldırılarını ve spam'i önler.
- * Kural: Her IP, bu endpoint'lere 15 dakikada 20 istek atabilir (daha katı).
+ * Prevents brute-force and spam against auth endpoints (login, register, forgot-password).
+ * Rule: 20 requests per 15 minutes per IP (stricter).
  */
 export const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 dakika
-    max: 20, // Her IP için 15 dakikada 20 deneme
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 20, // 20 attempts per IP per 15 min
     message: {
         status: 'error',
-        message: 'Çok fazla denemede bulundunuz. Lütfen 15 dakika sonra tekrar deneyin.',
+        code: 'AUTH_TOO_MANY_REQUESTS',
     },
     standardHeaders: true,
     legacyHeaders: false,

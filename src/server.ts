@@ -1,21 +1,21 @@
-// src/server.ts
+// Dosya: src/server.ts
 import app from './app';
-import { env } from './utils/env'; // <-- YENİ: Doğrulanmış ENV değişkenleri
-import logger from './utils/logger'; // <-- YENİ: Logger
+import { env } from './utils/env'; // <-- NEW: Validated ENV variables
+import logger from './utils/logger'; // <-- NEW: Logger
 
 try {
-    // 1. .env dosyasını doğrula. Eksikse, uygulama burada çöker.
+    // 1. Validate .env file. If missing, app crashes here.
     env;
-    logger.info('Tüm çevre değişkenleri (environment variables) başarıyla doğrulandı.');
+    logger.info('All environment variables validated successfully.');
 
-    // 2. Sunucuyu başlat
+    // 2. Start the server
     const PORT = env.PORT;
     app.listen(PORT, () => {
-        logger.info(`[Server]: Sunucu http://localhost:${PORT} adresinde çalışıyor`);
+        logger.info(`[Server]: Server is running at http://localhost:${PORT}`);
     });
 
 } catch (error) {
-    // Bu blok, Zod'un env doğrulamasının başarısız olması durumunda çalışır.
-    logger.error(error, '.env doğrulaması başarısız oldu. Sunucu başlatılamıyor.');
-    process.exit(1); // Hata ile çık
+    // This block catches failure from Zod's env validation
+    logger.error(error, '.env validation failed. Server cannot start.');
+    process.exit(1); // Exit with failure
 }

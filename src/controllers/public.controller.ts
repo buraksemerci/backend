@@ -1,11 +1,11 @@
-// src/controllers/public.controller.ts
+// Dosya: src/controllers/public.controller.ts
 import { Request, Response } from 'express';
 import * as publicService from '../services/public.service';
-import logger from '../utils/logger'; // <-- YENİ
+import logger from '../utils/logger';
 
 /**
- * Tekrarlanan try/catch bloklarını önlemek için
- * bir servis fonksiyonunu çalıştıran genel bir yardımcı
+ * A generic helper to run a service function
+ * to avoid repeated try/catch blocks.
  */
 const handleRequest = (
     serviceFunction: (languageCode: string) => Promise<any>
@@ -16,12 +16,12 @@ const handleRequest = (
 
         return res.status(200).json({ status: 'success', data });
     } catch (error: any) {
-        logger.error(error, `Public Data Hatası (${serviceFunction.name})`); // <-- DEĞİŞTİ
-        throw error; // Global error handler'a yönlendir
+        logger.error(error, `Public Data Error (${serviceFunction.name})`);
+        throw error; // Forward to global error handler
     }
 };
 
-// Her servis için bir handler oluştur
+// Create a handler for each service
 export const getEquipment = handleRequest(publicService.getEquipmentService);
 export const getBodyParts = handleRequest(publicService.getBodyPartsService);
 export const getLocations = handleRequest(publicService.getLocationsService);

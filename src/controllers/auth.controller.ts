@@ -1,4 +1,4 @@
-// src/controllers/auth.controller.ts
+// Dosya: src/controllers/auth.controller.ts
 import { Request, Response } from 'express';
 import {
     RegisterInput,
@@ -25,7 +25,7 @@ import {
     refreshTokenService,
     logoutUserService
 } from '../services/auth.service';
-import logger from '../utils/logger'; // <-- YENİ
+import logger from '../utils/logger';
 
 // === REGISTER HANDLER ===
 export const registerUserHandler = async (
@@ -40,18 +40,16 @@ export const registerUserHandler = async (
 
         return res.status(201).json({
             status: 'success',
-            message: 'Kayıt başarılı. Lütfen e-postanızı doğrulayın.',
             data: tokens,
         });
     } catch (error: any) {
         if (error.message === 'CONFLICT') {
             return res.status(409).json({
                 status: 'error',
-                message: 'Bu e-posta adresi veya kullanıcı adı zaten kullanımda.',
+                code: 'AUTH_CONFLICT',
             });
         }
-        logger.error(error, 'Register Handler Hatası'); // <-- DEĞİŞTİ
-        // Global error handler'a gitmesi için hatayı fırlat
+        logger.error(error, 'Register Handler Error');
         throw error;
     }
 };
@@ -69,17 +67,16 @@ export const loginUserHandler = async (
 
         return res.status(200).json({
             status: 'success',
-            message: 'Giriş başarılı.',
             data: tokens,
         });
     } catch (error: any) {
         if (error.message === 'INVALID_CREDENTIALS') {
             return res.status(401).json({
                 status: 'error',
-                message: 'Geçersiz e-posta/kullanıcı adı veya şifre.',
+                code: 'AUTH_INVALID_CREDENTIALS',
             });
         }
-        logger.error(error, 'Login Handler Hatası'); // <-- DEĞİŞTİ
+        logger.error(error, 'Login Handler Error');
         throw error;
     }
 };
@@ -91,7 +88,7 @@ export const verifyCodeHandler = async (
 ) => {
     try {
         if (!req.user) {
-            return res.status(403).json({ status: 'error', message: 'Yetkisiz erişim.' });
+            return res.status(403).json({ status: 'error', code: 'AUTH_UNAUTHORIZED' });
         }
         const userId = req.user.sub;
         const { code, deviceId } = req.body;
@@ -102,23 +99,22 @@ export const verifyCodeHandler = async (
 
         return res.status(200).json({
             status: 'success',
-            message: 'E-posta başarıyla doğrulandı.',
             data: tokens,
         });
     } catch (error: any) {
         if (error.message === 'INVALID_CODE') {
             return res.status(400).json({
                 status: 'error',
-                message: 'Geçersiz veya süresi dolmuş doğrulama kodu.',
+                code: 'AUTH_INVALID_CODE',
             });
         }
         if (error.message === 'ALREADY_VERIFIED') {
             return res.status(400).json({
                 status: 'error',
-                message: 'Bu hesap zaten doğrulanmış.',
+                code: 'AUTH_ALREADY_VERIFIED',
             });
         }
-        logger.error(error, 'Verify Code Handler Hatası'); // <-- DEĞİŞTİ
+        logger.error(error, 'Verify Code Handler Error');
         throw error;
     }
 };
@@ -127,7 +123,7 @@ export const verifyCodeHandler = async (
 export const resendCodeHandler = async (req: Request, res: Response) => {
     try {
         if (!req.user) {
-            return res.status(403).json({ status: 'error', message: 'Yetkisiz erişim.' });
+            return res.status(403).json({ status: 'error', code: 'AUTH_UNAUTHORIZED' });
         }
         const userId = req.user.sub;
         const ipAddress = req.ip || 'unknown';
@@ -137,16 +133,15 @@ export const resendCodeHandler = async (req: Request, res: Response) => {
 
         return res.status(200).json({
             status: 'success',
-            message: 'Yeni doğrulama kodu başarıyla gönderildi.',
         });
     } catch (error: any) {
         if (error.message === 'ALREADY_VERIFIED') {
             return res.status(400).json({
                 status: 'error',
-                message: 'Bu hesap zaten doğrulanmış.',
+                code: 'AUTH_ALREADY_VERIFIED',
             });
         }
-        logger.error(error, 'Resend Code Handler Hatası'); // <-- DEĞİŞTİ
+        logger.error(error, 'Resend Code Handler Error');
         throw error;
     }
 };
@@ -163,12 +158,12 @@ export const forgotPasswordHandler = async (
 
         await forgotPasswordService(email, ipAddress, userAgent);
 
+        // Always return 200 to prevent email enumeration
         return res.status(200).json({
             status: 'success',
-            message: 'İsteğiniz alındı. Eğer bu e-posta adresi kayıtlı ve doğrulanmış ise, bir şifre sıfırlama kodu gönderilecektir.',
         });
     } catch (error: any) {
-        logger.error(error, 'Forgot Password Handler Hatası'); // <-- DEĞİŞTİ
+        logger.error(error, 'Forgot Password Handler Error');
         throw error;
     }
 };
@@ -183,22 +178,21 @@ export const resetPasswordHandler = async (
 
         return res.status(200).json({
             status: 'success',
-            message: 'Şifreniz başarıyla sıfırlandı. Şimdi giriş yapabilirsiniz.',
         });
     } catch (error: any) {
         if (error.message === 'INVALID_CODE') {
             return res.status(400).json({
                 status: 'error',
-                message: 'Geçersiz, süresi dolmuş veya daha önce kullanılmış bir kod girdiniz.',
+                code: 'AUTH_INVALID_CODE',
             });
         }
         if (error.message === 'NO_LOCAL_ACCOUNT') {
             return res.status(400).json({
                 status: 'error',
-                message: 'Bu hesap, şifre sıfırlamayı desteklemeyen bir sosyal giriş yöntemi (Google, Apple vb.) ile oluşturulmuş.',
+                code: 'AUTH_NO_LOCAL_ACCOUNT',
             });
         }
-        logger.error(error, 'Reset Password Handler Hatası'); // <-- DEĞİŞTİ
+        logger.error(error, 'Reset Password Handler Error');
         throw error;
     }
 };
@@ -216,23 +210,22 @@ export const socialRegisterHandler = async (
 
         return res.status(201).json({
             status: 'success',
-            message: 'Sosyal kayıt başarılı.',
             data: tokens,
         });
     } catch (error: any) {
         if (error.message === 'TOKEN_VERIFICATION_FAILED') {
             return res.status(401).json({
                 status: 'error',
-                message: 'Geçersiz veya süresi dolmuş sosyal sağlayıcı token\'ı.',
+                code: 'AUTH_SOCIAL_TOKEN_INVALID',
             });
         }
         if (error.message === 'CONFLICT') {
             return res.status(409).json({
                 status: 'error',
-                message: 'Bu e-posta adresi zaten farklı bir yöntemle doğrulanmış.',
+                code: 'AUTH_CONFLICT',
             });
         }
-        logger.error(error, 'Social Register Handler Hatası'); // <-- DEĞİŞTİ
+        logger.error(error, 'Social Register Handler Error');
         throw error;
     }
 };
@@ -250,35 +243,33 @@ export const socialLoginHandler = async (
 
         return res.status(200).json({
             status: 'success',
-            message: 'Sosyal giriş başarılı.',
             data: tokens,
         });
     } catch (error: any) {
         if (error.message === 'TOKEN_VERIFICATION_FAILED') {
             return res.status(401).json({
                 status: 'error',
-                message: 'Geçersiz veya süresi dolmuş sosyal sağlayıcı token\'ı.',
+                code: 'AUTH_SOCIAL_TOKEN_INVALID',
             });
         }
         if (error.message === 'USER_NOT_FOUND') {
             return res.status(404).json({
                 status: 'error',
-                message: 'Bu sosyal hesap ile kayıtlı bir kullanıcı bulunamadı.',
+                code: 'AUTH_USER_NOT_FOUND',
             });
         }
         if (error.message === 'ACCOUNT_MERGE_REQUIRED') {
             return res.status(409).json({
                 status: 'error',
-                message: 'Bu e-posta adresi zaten bir şifre ile kayıtlı. Lütfen şifrenizle giriş yapıp hesapları birleştirin.',
-                code: 'ACCOUNT_MERGE_REQUIRED'
+                code: 'AUTH_ACCOUNT_MERGE_REQUIRED'
             });
         }
-        logger.error(error, 'Social Login Handler Hatası'); // <-- DEĞİŞTİ
+        logger.error(error, 'Social Login Handler Error');
         throw error;
     }
 };
 
-// === YENİ SOCIAL MERGE HANDLER'I ===
+// === SOCIAL MERGE HANDLER ===
 export const socialMergeHandler = async (
     req: Request<{}, {}, SocialMergeInput['body']>,
     res: Response
@@ -291,7 +282,6 @@ export const socialMergeHandler = async (
 
         return res.status(200).json({
             status: 'success',
-            message: 'Hesaplar başarıyla birleştirildi.',
             data: tokens,
         });
 
@@ -299,21 +289,21 @@ export const socialMergeHandler = async (
         if (error.message === 'TOKEN_VERIFICATION_FAILED') {
             return res.status(401).json({
                 status: 'error',
-                message: 'Geçersiz sosyal sağlayıcı token\'ı.',
+                code: 'AUTH_SOCIAL_TOKEN_INVALID',
             });
         }
         if (error.message === 'INVALID_CREDENTIALS') {
             return res.status(401).json({
                 status: 'error',
-                message: 'E-posta veya şifre hatalı. Birleştirme başarısız.',
+                code: 'AUTH_INVALID_CREDENTIALS',
             });
         }
-        logger.error(error, 'Social Merge Handler Hatası'); // <-- DEĞİŞTİ
+        logger.error(error, 'Social Merge Handler Error');
         throw error;
     }
 };
 
-// === YENİ REFRESH TOKEN HANDLER'I ===
+// === REFRESH TOKEN HANDLER ===
 export const refreshTokenHandler = async (
     req: Request<{}, {}, RefreshInput['body']>,
     res: Response
@@ -322,11 +312,10 @@ export const refreshTokenHandler = async (
         const ipAddress = req.ip || 'unknown';
         const userAgent = req.headers['user-agent'] || 'unknown';
 
-        const tokens = await refreshTokenService(req.body.refreshToken, req.body.deviceId, ipAddress, userAgent); // <-- Sıralama düzeltildi
+        const tokens = await refreshTokenService(req.body.refreshToken, req.body.deviceId, ipAddress, userAgent);
 
         return res.status(200).json({
             status: 'success',
-            message: 'Token başarıyla yenilendi.',
             data: tokens,
         });
 
@@ -334,10 +323,10 @@ export const refreshTokenHandler = async (
         if (error.message === 'INVALID_REFRESH_TOKEN') {
             return res.status(401).json({
                 status: 'error',
-                message: 'Geçersiz, süresi dolmuş veya kullanılmış refresh token.',
+                code: 'AUTH_INVALID_REFRESH_TOKEN',
             });
         }
-        logger.error(error, 'Refresh Token Handler Hatası'); // <-- DEĞİŞTİ
+        logger.error(error, 'Refresh Token Handler Error');
         throw error;
     }
 };
@@ -346,7 +335,7 @@ export const refreshTokenHandler = async (
 export const logoutUserHandler = async (req: Request<{}, {}, LogoutInput['body']>, res: Response) => {
     try {
         if (!req.user) {
-            return res.status(403).json({ status: 'error', message: 'Yetkisiz erişim.' });
+            return res.status(403).json({ status: 'error', code: 'AUTH_UNAUTHORIZED' });
         }
         const userId = req.user.sub;
         const { deviceId } = req.body;
@@ -355,11 +344,10 @@ export const logoutUserHandler = async (req: Request<{}, {}, LogoutInput['body']
 
         return res.status(200).json({
             status: 'success',
-            message: 'Başarıyla çıkış yapıldı.',
         });
 
     } catch (error: any) {
-        logger.error(error, 'Logout Handler Hatası'); // <-- DEĞİŞTİ
+        logger.error(error, 'Logout Handler Error');
         throw error;
     }
 };

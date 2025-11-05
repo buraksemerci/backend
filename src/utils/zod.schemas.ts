@@ -1,31 +1,31 @@
+// Dosya: src/utils/zod.schemas.ts
 import { z } from 'zod';
 
 // ===================================
 // TEMEL BLOKLAR (Export EDİLMEYEN)
 // ===================================
 
-// (Bu şemalar değişmedi, sadece artık export edilmiyorlar)
 const userProfileSchema = z.object({
-    firstName: z.string().min(2, 'Ad en az 2 karakter olmalıdır.'),
-    lastName: z.string().min(2, 'Soyad en az 2 karakter olmalıdır.'),
-    birthDate: z.string().datetime('Geçersiz doğum tarihi formatı (ISO 8601).'),
-    gender: z.string().min(1, 'Cinsiyet seçimi zorunludur.'),
+    firstName: z.string().min(2),
+    lastName: z.string().min(2),
+    birthDate: z.string().datetime(),
+    gender: z.string().min(1),
 });
 
 const userBodySchema = z.object({
-    heightCM: z.number().positive('Boy pozitif bir sayı olmalıdır.'),
-    weightKG: z.number().positive('Kilo pozitif bir sayı olmalıdır.'),
-    activityLevel: z.string().min(1, 'Aktivite seviyesi zorunludur.'),
-    bodyType: z.string().min(1, 'Vücut tipi zorunludur.'),
+    heightCM: z.number().positive(),
+    weightKG: z.number().positive(),
+    activityLevel: z.string().min(1),
+    bodyType: z.string().min(1),
 });
 
 const userGoalSchema = z.object({
-    primaryGoal: z.string().min(1, 'Ana hedef zorunludur.'),
-    targetWeightKG: z.number().positive('Hedef kilo pozitif olmalı.').nullable().optional(),
+    primaryGoal: z.string().min(1),
+    targetWeightKG: z.number().positive().nullable().optional(),
 });
 
 const userSettingSchema = z.object({
-    preferredUnit: z.string().min(1, 'Birim tercihi zorunludur.'),
+    preferredUnit: z.string().min(1),
     preferredLanguage: z.string().default('tr'),
     theme: z.string().default('system'),
 });
@@ -42,9 +42,9 @@ export const profileDataSchema = z.object({
 
     // M:N İlişki ID'leri
     healthLimitationIds: z.array(z.number().int()).default([]),
-    targetBodyPartIds: z.array(z.number().int()).min(1, 'En az bir hedef bölge seçmelisiniz.'),
-    availableEquipmentIds: z.array(z.number().int()).min(1, 'En az bir ekipman seçmelisiniz.'),
-    workoutLocationIds: z.array(z.number().int()).min(1, 'En az bir antrenman konumu seçmelisiniz.'),
+    targetBodyPartIds: z.array(z.number().int()).min(1),
+    availableEquipmentIds: z.array(z.number().int()).min(1),
+    workoutLocationIds: z.array(z.number().int()).min(1),
 });
 
 // === YENİ TİP (ZOD'DAN ÇIKARILAN) ===
@@ -56,10 +56,10 @@ export type ProfileCreationInput = z.infer<typeof profileDataSchema>;
 export const registerSchema = z.object({
     body: z.object({
         // Auth'a özel alanlar
-        email: z.string().email('Geçersiz e-posta adresi.'),
-        password: z.string().min(8, 'Şifre en az 8 karakter olmalıdır.'),
-        username: z.string().min(3, 'Kullanıcı adı en az 3 karakter olmalıdır.'),
-        deviceId: z.string().min(1, 'Cihaz ID zorunludur.'),
+        email: z.string().email(),
+        password: z.string().min(8),
+        username: z.string().min(3),
+        deviceId: z.string().min(1),
     }).merge(profileDataSchema), // <-- Ortak profil verilerini buraya ekle
 });
 
@@ -68,9 +68,9 @@ export const registerSchema = z.object({
 // ===================================
 export const loginSchema = z.object({
     body: z.object({
-        loginIdentifier: z.string().min(3, 'Giriş bilgisi gerekli.'),
-        password: z.string().min(1, 'Şifre gerekli.'),
-        deviceId: z.string().min(1, 'Cihaz ID zorunludur.'),
+        loginIdentifier: z.string().min(3),
+        password: z.string().min(1),
+        deviceId: z.string().min(1),
     }),
 });
 
@@ -81,9 +81,9 @@ export const verifyCodeSchema = z.object({
     body: z.object({
         code: z
             .string()
-            .min(6, 'Kod 6 haneli olmalıdır.')
-            .max(6, 'Kod 6 haneli olmalıdır.'),
-        deviceId: z.string().min(1, 'Cihaz ID zorunludur.'),
+            .min(6)
+            .max(6),
+        deviceId: z.string().min(1),
     }),
 });
 
@@ -92,7 +92,7 @@ export const verifyCodeSchema = z.object({
 // ===================================
 export const forgotPasswordSchema = z.object({
     body: z.object({
-        email: z.string().email('Geçersiz e-posta adresi.'),
+        email: z.string().email(),
     }),
 });
 
@@ -101,12 +101,12 @@ export const forgotPasswordSchema = z.object({
 // ===================================
 export const resetPasswordSchema = z.object({
     body: z.object({
-        email: z.string().email('Geçersiz e-posta adresi.'),
+        email: z.string().email(),
         code: z
             .string()
-            .min(6, 'Kod 6 haneli olmalıdır.')
-            .max(6, 'Kod 6 haneli olmalıdır.'),
-        newPassword: z.string().min(8, 'Yeni şifre en az 8 karakter olmalıdır.'),
+            .min(6)
+            .max(6),
+        newPassword: z.string().min(8),
     }),
 });
 
@@ -120,9 +120,9 @@ export const socialRegisterSchema = z.object({
     body: z.object({
         // Sosyal Auth'a özel alanlar
         provider: socialProviderEnum,
-        providerToken: z.string().min(1, 'Provider token zorunludur.'),
-        username: z.string().min(3, 'Kullanıcı adı en az 3 karakter olmalıdır.'),
-        deviceId: z.string().min(1, 'Cihaz ID zorunludur.'),
+        providerToken: z.string().min(1),
+        username: z.string().min(3),
+        deviceId: z.string().min(1),
     }).merge(profileDataSchema), // <-- Ortak profil verilerini buraya ekle
 });
 
@@ -130,8 +130,8 @@ export const socialRegisterSchema = z.object({
 export const socialLoginSchema = z.object({
     body: z.object({
         provider: socialProviderEnum,
-        providerToken: z.string().min(1, 'Provider token zorunludur.'),
-        deviceId: z.string().min(1, 'Cihaz ID zorunludur.'),
+        providerToken: z.string().min(1),
+        deviceId: z.string().min(1),
     }),
 });
 
@@ -139,9 +139,9 @@ export const socialLoginSchema = z.object({
 export const socialMergeSchema = z.object({
     body: z.object({
         provider: socialProviderEnum,
-        providerToken: z.string().min(1, 'Provider token zorunludur.'),
-        password: z.string().min(1, 'Şifre zorunludur.'),
-        deviceId: z.string().min(1, 'Cihaz ID zorunludur.'),
+        providerToken: z.string().min(1),
+        password: z.string().min(1),
+        deviceId: z.string().min(1),
     }),
 });
 
@@ -150,14 +150,14 @@ export const socialMergeSchema = z.object({
 // ===================================
 export const refreshSchema = z.object({
     body: z.object({
-        refreshToken: z.string().min(1, 'Refresh token zorunludur.'),
-        deviceId: z.string().min(1, 'Cihaz ID zorunludur.'),
+        refreshToken: z.string().min(1),
+        deviceId: z.string().min(1),
     }),
 });
 
 export const logoutSchema = z.object({
     body: z.object({
-        deviceId: z.string().min(1, 'Cihaz ID zorunludur.'),
+        deviceId: z.string().min(1),
     }),
 });
 
