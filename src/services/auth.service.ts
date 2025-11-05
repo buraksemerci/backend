@@ -10,7 +10,8 @@ import {
     ResetPasswordInput,
     SocialRegisterInput,
     SocialLoginInput,
-    SocialMergeInput
+    SocialMergeInput,
+    ProfileCreationInput
 } from '../utils/zod.schemas';
 import {
     generateSixDigitCode,
@@ -28,6 +29,61 @@ import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import logger from '../utils/logger'; // <-- YENİ
 import { env } from '../utils/env'; // <-- YENİ
 
+
+async function _createOrUpdateProfileData(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    input: ProfileCreationInput
+) {
+    logger.info(`Kullanıcı ${userId} için profil verileri oluşturuluyor/güncelleniyor...`);
+
+    // 1. Önceki tüm verileri temizle (Overwrite/İşgal senaryosu için)
+    // (deleteMany kullanmak, kayıt yoksa hata vermez, delete verir)
+    await tx.userHealthLimitation.deleteMany({ where: { userId } });
+    await tx.userGoalPart.deleteMany({ where: { userId } });
+    await tx.userAvailableWorkoutEquipment.deleteMany({ where: { userId } });
+    await tx.userWorkoutLocation.deleteMany({ where: { userId } });
+    await tx.userProfile.deleteMany({ where: { userId } });
+    await tx.userBody.deleteMany({ where: { userId } });
+    await tx.userGoal.deleteMany({ where: { userId } });
+    await tx.userSetting.deleteMany({ where: { userId } });
+
+    // 2. Yeni 1:1 verileri oluştur
+    await tx.userProfile.create({ data: { userId, ...input.profile } });
+    await tx.userBody.create({ data: { userId, ...input.body } });
+    await tx.userGoal.create({ data: { userId, ...input.goal } });
+    await tx.userSetting.create({ data: { userId, ...input.settings } });
+
+    // 3. Yeni M:N verileri oluştur
+    await tx.userGoalPart.createMany({
+        data: input.targetBodyPartIds.map((id) => ({
+            userId,
+            goalBodyPartId: id,
+        })),
+    });
+    await tx.userAvailableWorkoutEquipment.createMany({
+        data: input.availableEquipmentIds.map((id) => ({
+            userId,
+            workoutEquipmentId: id,
+        })),
+    });
+    await tx.userWorkoutLocation.createMany({
+        data: input.workoutLocationIds.map((id) => ({
+            userId,
+            workoutLocationId: id,
+        })),
+    });
+    if (input.healthLimitationIds.length > 0) {
+        await tx.userHealthLimitation.createMany({
+            data: input.healthLimitationIds.map((id) => ({
+                userId,
+                healthLimitationId: id,
+            })),
+        });
+    }
+    logger.info(`Kullanıcı ${userId} için profil verileri başarıyla oluşturuldu.`);
+}
+
 // === REGISTER USER SERVICE ===
 export const registerUserService = async (
     input: RegisterInput['body'],
@@ -36,42 +92,27 @@ export const registerUserService = async (
     deviceId: string
 ) => {
 
-    // 1. Şifreyi Hash'le
     const passwordHash = await bcrypt.hash(input.password, 12);
 
-    // 2. "Akıllı Kayıt" için e-posta/kullanıcı adını kontrol et
     const existingUser = await prisma.user.findFirst({
         where: {
             OR: [{ email: input.email }, { username: input.username }],
         },
     });
 
-    // 3. Durum 1: "Doğrulanmış" Çakışma
     if (existingUser && existingUser.isEmailVerified) {
         throw new Error('CONFLICT');
     }
 
-    // --- Buradan sonrası Atomik (Transaction) olmalı ---
     try {
         const { user, tokens } = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             let userId: string;
 
-            // 4. Durum 2: "İşgal (Overwrite)"
             if (existingUser && !existingUser.isEmailVerified) {
                 logger.info(`Akıllı Kayıt: ${existingUser.userId} ID'li doğrulanmamış hesap üzerine yazılıyor...`);
                 userId = existingUser.userId;
 
-                // 4a. ESKİ SAHTE profil verilerini SİL
-                await tx.userHealthLimitation.deleteMany({ where: { userId } });
-                await tx.userGoalPart.deleteMany({ where: { userId } });
-                await tx.userAvailableWorkoutEquipment.deleteMany({ where: { userId } });
-                await tx.userWorkoutLocation.deleteMany({ where: { userId } });
-                try { await tx.userProfile.delete({ where: { userId } }); } catch (e) { /* Hata yoksayılabilir */ }
-                try { await tx.userBody.delete({ where: { userId } }); } catch (e) { /* Hata yoksayılabilir */ }
-                try { await tx.userGoal.delete({ where: { userId } }); } catch (e) { /* Hata yoksayılabilir */ }
-                try { await tx.userSetting.delete({ where: { userId } }); } catch (e) { /* Hata yoksayılabilir */ }
-
-                // 4b. Ana User ve Şifresini GÜNCELLE
+                // Ana User ve Şifresini GÜNCELLE
                 await tx.user.update({
                     where: { userId },
                     data: {
@@ -87,7 +128,6 @@ export const registerUserService = async (
                 });
 
             } else {
-                // 5. Durum 3: "Temiz Kayıt"
                 logger.info(`Temiz Kayıt: ${input.email} için yeni kullanıcı oluşturuluyor...`);
 
                 const newUser = await tx.user.create({
@@ -108,37 +148,10 @@ export const registerUserService = async (
                 });
             }
 
-            // 6. YENİ ve GERÇEK profil verilerini oluştur
-            await tx.userProfile.create({ data: { userId, ...input.profile } });
-            await tx.userBody.create({ data: { userId, ...input.body } });
-            await tx.userGoal.create({ data: { userId, ...input.goal } });
-            await tx.userSetting.create({ data: { userId, ...input.settings } });
-            await tx.userGoalPart.createMany({
-                data: input.targetBodyPartIds.map((id) => ({
-                    userId,
-                    goalBodyPartId: id,
-                })),
-            });
-            await tx.userAvailableWorkoutEquipment.createMany({
-                data: input.availableEquipmentIds.map((id) => ({
-                    userId,
-                    workoutEquipmentId: id,
-                })),
-            });
-            await tx.userWorkoutLocation.createMany({
-                data: input.workoutLocationIds.map((id) => ({
-                    userId,
-                    workoutLocationId: id,
-                })),
-            });
-            if (input.healthLimitationIds.length > 0) {
-                await tx.userHealthLimitation.createMany({
-                    data: input.healthLimitationIds.map((id) => ({
-                        userId,
-                        healthLimitationId: id,
-                    })),
-                });
-            }
+            // --- DEĞİŞİKLİK: YARDIMCI FONKSİYON ÇAĞRILDI ---
+            // Kod tekrarı olan profil oluşturma mantığı buradaydı, artık fonksiyonda.
+            await _createOrUpdateProfileData(tx, userId, input);
+            // --- DEĞİŞİKLİK SONU ---
 
             // 7. Doğrulama Kodu
             const code = generateSixDigitCode();
@@ -190,7 +203,7 @@ export const registerUserService = async (
             }
         }
         logger.error(error, 'Kayıt Transaction Hatası');
-        throw new Error('Internal Server Error'); // Bu, global error handler tarafından yakalanacak
+        throw new Error('Internal Server Error');
     }
 };
 
@@ -458,6 +471,7 @@ export const socialRegisterService = async (
             throw new Error('TOKEN_VERIFICATION_FAILED');
         }
     } else {
+        // TODO: Apple ve Facebook doğrulaması buraya eklenecek
         throw new Error('Provider not yet supported');
     }
 
@@ -477,15 +491,6 @@ export const socialRegisterService = async (
             if (existingUser && !existingUser.isEmailVerified) {
                 logger.info(`Sosyal Kayıt (Overwrite): ${existingUser.userId} ID'li doğrulanmamış hesap üzerine yazılıyor...`);
                 userId = existingUser.userId;
-
-                await tx.userHealthLimitation.deleteMany({ where: { userId } });
-                await tx.userGoalPart.deleteMany({ where: { userId } });
-                await tx.userAvailableWorkoutEquipment.deleteMany({ where: { userId } });
-                await tx.userWorkoutLocation.deleteMany({ where: { userId } });
-                try { await tx.userProfile.delete({ where: { userId } }); } catch (e) { /* Hata yoksayılabilir */ }
-                try { await tx.userBody.delete({ where: { userId } }); } catch (e) { /* Hata yoksayılabilir */ }
-                try { await tx.userGoal.delete({ where: { userId } }); } catch (e) { /* Hata yoksayılabilir */ }
-                try { await tx.userSetting.delete({ where: { userId } }); } catch (e) { /* Hata yoksayılabilir */ }
 
                 await tx.user.update({
                     where: { userId },
@@ -509,26 +514,13 @@ export const socialRegisterService = async (
                 userId = newUser.userId;
             }
 
-            await tx.userProfile.create({ data: { userId, ...input.profile } });
-            await tx.userBody.create({ data: { userId, ...input.body } });
-            await tx.userGoal.create({ data: { userId, ...input.goal } });
-            await tx.userSetting.create({ data: { userId, ...input.settings } });
+            // --- DEĞİŞİKLİK: YARDIMCI FONKSİYON ÇAĞRILDI ---
+            // Kod tekrarı olan profil oluşturma mantığı buradaydı, artık fonksiyonda.
+            await _createOrUpdateProfileData(tx, userId, input);
+            // --- DEĞİŞİKLİK SONU ---
 
-            await tx.userGoalPart.createMany({
-                data: input.targetBodyPartIds.map((id) => ({ userId, goalBodyPartId: id })),
-            });
-            await tx.userAvailableWorkoutEquipment.createMany({
-                data: input.availableEquipmentIds.map((id) => ({ userId, workoutEquipmentId: id })),
-            });
-            await tx.userWorkoutLocation.createMany({
-                data: input.workoutLocationIds.map((id) => ({ userId, workoutLocationId: id })),
-            });
-            if (input.healthLimitationIds.length > 0) {
-                await tx.userHealthLimitation.createMany({
-                    data: input.healthLimitationIds.map((id) => ({ userId, healthLimitationId: id })),
-                });
-            }
 
+            // 7. Sosyal Bağlantıyı (ExternalLogin) Oluştur
             await tx.userExternalLogin.upsert({
                 where: {
                     loginProvider_providerKey: {
@@ -546,7 +538,10 @@ export const socialRegisterService = async (
                 },
             });
 
+            // 8. JWT Oluştur
             const tokens = await signTokens(userId, true);
+
+            // 9. Refresh Token'ı Kaydet
             const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
             const expiresAt = new Date(Date.now() + (env.JWT_REFRESH_EXPIRATION_DAYS * 24 * 60 * 60 * 1000));
 

@@ -1,8 +1,10 @@
 import { z } from 'zod';
 
 // ===================================
-// TEMEL PROFİL ŞEMALARI (BUNLAR AYNI)
+// TEMEL BLOKLAR (Export EDİLMEYEN)
 // ===================================
+
+// (Bu şemalar değişmedi, sadece artık export edilmiyorlar)
 const userProfileSchema = z.object({
     firstName: z.string().min(2, 'Ad en az 2 karakter olmalıdır.'),
     lastName: z.string().min(2, 'Soyad en az 2 karakter olmalıdır.'),
@@ -29,35 +31,41 @@ const userSettingSchema = z.object({
 });
 
 // ===================================
-// ANA KAYIT (REGISTER) ŞEMASI (YENİ)
+// === YENİ YENİDEN KULLANILABİLİR PROFİL ŞEMASI ===
 // ===================================
+export const profileDataSchema = z.object({
+    // 1:1 Profil Verileri
+    profile: userProfileSchema,
+    body: userBodySchema,
+    goal: userGoalSchema,
+    settings: userSettingSchema,
 
+    // M:N İlişki ID'leri
+    healthLimitationIds: z.array(z.number().int()).default([]),
+    targetBodyPartIds: z.array(z.number().int()).min(1, 'En az bir hedef bölge seçmelisiniz.'),
+    availableEquipmentIds: z.array(z.number().int()).min(1, 'En az bir ekipman seçmelisiniz.'),
+    workoutLocationIds: z.array(z.number().int()).min(1, 'En az bir antrenman konumu seçmelisiniz.'),
+});
+
+// === YENİ TİP (ZOD'DAN ÇIKARILAN) ===
+export type ProfileCreationInput = z.infer<typeof profileDataSchema>;
+
+// ===================================
+// ANA KAYIT (REGISTER) ŞEMASI (GÜNCELLENDİ)
+// ===================================
 export const registerSchema = z.object({
     body: z.object({
-        // Auth
+        // Auth'a özel alanlar
         email: z.string().email('Geçersiz e-posta adresi.'),
         password: z.string().min(8, 'Şifre en az 8 karakter olmalıdır.'),
         username: z.string().min(3, 'Kullanıcı adı en az 3 karakter olmalıdır.'),
         deviceId: z.string().min(1, 'Cihaz ID zorunludur.'),
-
-        // 1:1 Profil Verileri
-        profile: userProfileSchema,
-        body: userBodySchema,
-        goal: userGoalSchema,
-        settings: userSettingSchema,
-
-        // M:N İlişki ID'leri
-        healthLimitationIds: z.array(z.number().int()).default([]),
-        targetBodyPartIds: z.array(z.number().int()).min(1, 'En az bir hedef bölge seçmelisiniz.'),
-        availableEquipmentIds: z.array(z.number().int()).min(1, 'En az bir ekipman seçmelisiniz.'),
-        workoutLocationIds: z.array(z.number().int()).min(1, 'En az bir antrenman konumu seçmelisiniz.'),
-    }),
+    }).merge(profileDataSchema), // <-- Ortak profil verilerini buraya ekle
 });
 
 // ===================================
-// GİRİŞ (LOGIN) ŞEMASI (YENİ)
+// GİRİŞ (LOGIN) ŞEMASI
 // ===================================
-
 export const loginSchema = z.object({
     body: z.object({
         loginIdentifier: z.string().min(3, 'Giriş bilgisi gerekli.'),
@@ -65,6 +73,7 @@ export const loginSchema = z.object({
         deviceId: z.string().min(1, 'Cihaz ID zorunludur.'),
     }),
 });
+
 // ===================================
 // KOD DOĞRULAMA (VERIFY CODE) ŞEMASI
 // ===================================
@@ -77,6 +86,7 @@ export const verifyCodeSchema = z.object({
         deviceId: z.string().min(1, 'Cihaz ID zorunludur.'),
     }),
 });
+
 // ===================================
 // ŞİFRE UNUTTUM (FORGOT PASSWORD) ŞEMASI
 // ===================================
@@ -99,55 +109,36 @@ export const resetPasswordSchema = z.object({
         newPassword: z.string().min(8, 'Yeni şifre en az 8 karakter olmalıdır.'),
     }),
 });
-// Hangi sağlayıcıları kabul ettiğimizi tanımlayan bir enum
+
+// ===================================
+// SOSYAL GİRİŞ (SOCIAL) ŞEMALARI
+// ===================================
 const socialProviderEnum = z.enum(['GOOGLE', 'APPLE', 'FACEBOOK']);
 
-// ===================================
-// SOSYAL KAYIT (SOCIAL REGISTER) ŞEMASI
-// ===================================
+// === SOSYAL KAYIT (GÜNCELLENDİ) ===
 export const socialRegisterSchema = z.object({
     body: z.object({
-        // Auth (Lokal yerine Sosyal)
-        provider: socialProviderEnum, // "GOOGLE"
+        // Sosyal Auth'a özel alanlar
+        provider: socialProviderEnum,
         providerToken: z.string().min(1, 'Provider token zorunludur.'),
-
-        // === YENİ (SİZİN TALEBİNİZ ÜZERİNE EKLENDİ) ===
-        // 'register' akışıyla aynı olması için username'i zorunlu kılıyoruz.
         username: z.string().min(3, 'Kullanıcı adı en az 3 karakter olmalıdır.'),
         deviceId: z.string().min(1, 'Cihaz ID zorunludur.'),
-        // ============================================
-
-        // 1:1 Profil Verileri (Lokal kayıt ile aynı)
-        profile: userProfileSchema,
-        body: userBodySchema,
-        goal: userGoalSchema,
-        settings: userSettingSchema,
-
-        // M:N İlişki ID'leri (Lokal kayıt ile aynı)
-        healthLimitationIds: z.array(z.number().int()).default([]),
-        targetBodyPartIds: z.array(z.number().int()).min(1, 'En az bir hedef bölge seçmelisiniz.'),
-        availableEquipmentIds: z.array(z.number().int()).min(1, 'En az bir ekipman seçmelisiniz.'),
-        workoutLocationIds: z.array(z.number().int()).min(1, 'En az bir antrenman konumu seçmelisiniz.'),
-    }),
+    }).merge(profileDataSchema), // <-- Ortak profil verilerini buraya ekle
 });
 
-// ===================================
-// SOSYAL GİRİŞ (SOCIAL LOGIN) ŞEMASI
-// ===================================
+// === SOSYAL GİRİŞ ===
 export const socialLoginSchema = z.object({
     body: z.object({
-        provider: socialProviderEnum, // "GOOGLE", "APPLE", "FACEBOOK"
+        provider: socialProviderEnum,
         providerToken: z.string().min(1, 'Provider token zorunludur.'),
         deviceId: z.string().min(1, 'Cihaz ID zorunludur.'),
     }),
 });
 
-// ===================================
-// SOSYAL BİRLEŞTİRME (SOCIAL MERGE) ŞEMASI
-// ===================================
+// === SOSYAL BİRLEŞTİRME ===
 export const socialMergeSchema = z.object({
     body: z.object({
-        provider: socialProviderEnum, // "GOOGLE", "APPLE", "FACEBOOK"
+        provider: socialProviderEnum,
         providerToken: z.string().min(1, 'Provider token zorunludur.'),
         password: z.string().min(1, 'Şifre zorunludur.'),
         deviceId: z.string().min(1, 'Cihaz ID zorunludur.'),
@@ -155,7 +146,7 @@ export const socialMergeSchema = z.object({
 });
 
 // ===================================
-// TOKEN YENİLEME (REFRESH TOKEN) ŞEMASI
+// OTURUM (SESSION) ŞEMALARI
 // ===================================
 export const refreshSchema = z.object({
     body: z.object({
@@ -163,22 +154,25 @@ export const refreshSchema = z.object({
         deviceId: z.string().min(1, 'Cihaz ID zorunludur.'),
     }),
 });
-// ===================================
-// ÇIKIŞ (LOGOUT) ŞEMASI (YENİ)
-// ===================================
+
 export const logoutSchema = z.object({
     body: z.object({
         deviceId: z.string().min(1, 'Cihaz ID zorunludur.'),
     }),
 });
 
-export type SocialMergeInput = z.infer<typeof socialMergeSchema>;
-export type SocialLoginInput = z.infer<typeof socialLoginSchema>;
-export type SocialRegisterInput = z.infer<typeof socialRegisterSchema>;
+// ===================================
+// TÜM TİP ÇIKARIMLARI (TYPE INFERENCES)
+// ===================================
+export type RegisterInput = z.infer<typeof registerSchema>;
+export type LoginInput = z.infer<typeof loginSchema>;
+export type VerifyCodeInput = z.infer<typeof verifyCodeSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
-export type VerifyCodeInput = z.infer<typeof verifyCodeSchema>;
-export type LoginInput = z.infer<typeof loginSchema>;
-export type RegisterInput = z.infer<typeof registerSchema>;
+export type SocialRegisterInput = z.infer<typeof socialRegisterSchema>;
+export type SocialLoginInput = z.infer<typeof socialLoginSchema>;
+export type SocialMergeInput = z.infer<typeof socialMergeSchema>;
 export type RefreshInput = z.infer<typeof refreshSchema>;
 export type LogoutInput = z.infer<typeof logoutSchema>;
+
+// (ProfileCreationInput artık yukarıda, profileDataSchema'nın hemen altında tanımlı)
