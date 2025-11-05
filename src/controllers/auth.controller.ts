@@ -95,7 +95,9 @@ export const verifyCodeHandler = async (
     res: Response
 ) => {
     try {
-        // @ts-ignore
+        if (!req.user) {
+            return res.status(403).json({ status: 'error', message: 'Yetkisiz erişim.' });
+        }
         const userId = req.user.sub;
         const { code, deviceId } = req.body;
         const ipAddress = req.ip || 'unknown';
@@ -132,7 +134,9 @@ export const verifyCodeHandler = async (
 // === RESEND CODE HANDLER (GÜNCELLENDİ) ===
 export const resendCodeHandler = async (req: Request, res: Response) => {
     try {
-        // @ts-ignore
+        if (!req.user) {
+            return res.status(403).json({ status: 'error', message: 'Yetkisiz erişim.' });
+        }
         const userId = req.user.sub;
         const ipAddress = req.ip || 'unknown';
         const userAgent = req.headers['user-agent'] || 'unknown';
@@ -376,7 +380,9 @@ export const refreshTokenHandler = async (
 
 export const logoutUserHandler = async (req: Request<{}, {}, LogoutInput['body']>, res: Response) => {
     try {
-        // @ts-ignore
+        if (!req.user) {
+            return res.status(403).json({ status: 'error', message: 'Yetkisiz erişim.' });
+        }
         const userId = req.user.sub; // checkJwt'den gelen 'userId'
         const { deviceId } = req.body; // Zod'dan gelen 'deviceId'
 

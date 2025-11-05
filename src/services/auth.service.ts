@@ -936,16 +936,22 @@ export const refreshTokenService = async (
     const newExpiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRATION_DAYS || '30') * 24 * 60 * 60 * 1000));
 
     // 7. Atomik İşlem: ESKİ token'ı SİL, YENİ token'ı EKLE
+    // 7. Atomik İşlem: ESKİ token'ı SİL, YENİ token'ı EKLE
     await prisma.$transaction(async (tx) => {
-        // Güvenlik için tüm tokenları silebiliriz veya sadece kullanılanı:
-        // Biz sadece bu spesifik token'ı silmeyi (veya 'isUsed' yapmayı) seçiyoruz
-        await tx.refreshToken.update({
-            where: { refreshTokenId: tokenRecord.refreshTokenId },
-            data: { isUsed: true }, // Veya delete()
+
+        // --- DEĞİŞİKLİK BURADA ---
+        // Önceki 'update' ve 'create' yerine, 'login' ile tutarlı
+        // 'deleteMany' ve 'create' kullanıyoruz. Bu, '@@unique' kuralını korur.
+
+        // 1. Bu cihaza ait mevcut (kullanılmış ve süresi dolmuş olabilecek) token'ları sil
+        await tx.refreshToken.deleteMany({
+            where: {
+                userId: userId,
+                deviceId: deviceId,
+            },
         });
 
-        // Yeni refresh token'ı kaydet
-        // --- DEĞİŞİKLİK ---
+        // 2. Yeni refresh token'ı kaydet
         await tx.refreshToken.create({
             data: {
                 userId: userId,
@@ -953,7 +959,7 @@ export const refreshTokenService = async (
                 expiresAt: newExpiresAt,
                 createdByIP: ipAddress,
                 userAgent: userAgent,
-                deviceId: deviceId // <-- EKLENDİ
+                deviceId: deviceId
             }
         });
         // --- DEĞİŞİKLİK SONU ---

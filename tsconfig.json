@@ -10,10 +10,12 @@
     "moduleResolution": "node",
     "resolveJsonModule": true,
     "sourceMap": true
+    // "typeRoots" satırını buradan sildiğinizden emin olun (eğer eklediyseniz)
   },
   "include": [
     "src/**/*.ts",
-    "src/**/*.json"
+    "src/**/*.json",
+    "src/types/express/index.d.ts" // <-- BU SATIRI EKLEYİN
   ],
   "exclude": [
     "node_modules",

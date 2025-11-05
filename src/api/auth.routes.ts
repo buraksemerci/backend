@@ -26,11 +26,13 @@ import {
     refreshSchema,
     logoutSchema
 } from '../utils/zod.schemas';
+import { authLimiter } from '../middlewares/rateLimiter';
 
 const router = Router();
 
 router.post(
     '/register',
+    authLimiter,
     validate(registerSchema), // <-- Değişti
     registerUserHandler
 );
@@ -43,6 +45,7 @@ router.post(
  */
 router.post(
     '/login',
+    authLimiter,
     validate(loginSchema), // 1. Zod ile isteği doğrula
     loginUserHandler         // 2. Doğrulanmışsa, controller'a gönder
 );
@@ -78,6 +81,7 @@ router.post(
  */
 router.post(
     '/forgot-password',
+    authLimiter,
     validate(forgotPasswordSchema), // 1. Zod ile e-postayı doğrula
     forgotPasswordHandler          // 2. Controller'a gönder
 );
@@ -90,6 +94,7 @@ router.post(
  */
 router.post(
     '/reset-password',
+    authLimiter,
     validate(resetPasswordSchema), // 1. Zod ile (email, code, newPassword) doğrula
     resetPasswordHandler           // 2. Controller'a gönder
 );
@@ -100,6 +105,7 @@ router.post(
  */
 router.post(
     '/social/register',
+    authLimiter,
     validate(socialRegisterSchema), // 1. Zod ile isteği doğrula
     socialRegisterHandler          // 2. Controller'a gönder
 );
@@ -110,6 +116,7 @@ router.post(
  */
 router.post(
     '/social/login',
+    authLimiter,
     validate(socialLoginSchema), // 1. Zod ile isteği doğrula
     socialLoginHandler          // 2. Controller'a gönder
 );
@@ -120,6 +127,7 @@ router.post(
  */
 router.post(
     '/social/merge',
+    authLimiter,
     validate(socialMergeSchema), // 1. Zod ile doğrula
     socialMergeHandler          // 2. Controller'a gönder
 );
@@ -130,6 +138,7 @@ router.post(
  */
 router.post(
     '/refresh',
+    authLimiter,
     validate(refreshSchema), // 1. Zod ile doğrula
     refreshTokenHandler      // 2. Controller'a gönder
 );
