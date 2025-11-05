@@ -1,16 +1,23 @@
+// Dosya: src/services/public.service.ts
+
 import prisma from '../utils/prisma';
 
 /**
  * Mobil uygulamaya tutarlı bir API sağlamak için
  * veritabanı sonuçlarını standart bir { id, name } formatına dönüştürür.
+ * (Tüm fonksiyonlar dile göre çalışacak şekilde güncellendi)
  */
 
-// 1. Ekipmanları Getir
-export const getEquipmentService = async () => {
-    const items = await prisma.workoutEquipment.findMany({
+// 1. Ekipmanları Getir (GÜNCELLENDİ)
+export const getEquipmentService = async (languageCode: string) => {
+    const items = await prisma.workoutEquipmentTranslation.findMany({
+        where: {
+            languageCode: languageCode,
+        },
         select: {
-            workoutEquipmentId: true,
+            workoutEquipmentId: true, // Ana ID
             name: true,
+            description: true
         },
         orderBy: {
             name: 'asc', // Alfabetik sırala
@@ -20,15 +27,20 @@ export const getEquipmentService = async () => {
     return items.map((item) => ({
         id: item.workoutEquipmentId,
         name: item.name,
+        description: item.description,
     }));
 };
 
-// 2. Vücut Bölgelerini Getir
-export const getBodyPartsService = async () => {
-    const items = await prisma.goalBodyPart.findMany({
+// 2. Vücut Bölgelerini Getir (GÜNCELLENDİ)
+export const getBodyPartsService = async (languageCode: string) => {
+    const items = await prisma.goalBodyPartTranslation.findMany({
+        where: {
+            languageCode: languageCode,
+        },
         select: {
-            goalBodyPartId: true,
+            goalBodyPartId: true, // Ana ID
             name: true,
+            description: true
         },
         orderBy: {
             name: 'asc',
@@ -37,15 +49,20 @@ export const getBodyPartsService = async () => {
     return items.map((item) => ({
         id: item.goalBodyPartId,
         name: item.name,
+        description: item.description,
     }));
 };
 
-// 3. Konumları Getir
-export const getLocationsService = async () => {
-    const items = await prisma.workoutLocation.findMany({
+// 3. Konumları Getir (GÜNCELLENDİ)
+export const getLocationsService = async (languageCode: string) => {
+    const items = await prisma.workoutLocationTranslation.findMany({
+        where: {
+            languageCode: languageCode,
+        },
         select: {
-            workoutLocationId: true,
+            workoutLocationId: true, // Ana ID
             name: true,
+            description: true
         },
         orderBy: {
             name: 'asc',
@@ -54,15 +71,20 @@ export const getLocationsService = async () => {
     return items.map((item) => ({
         id: item.workoutLocationId,
         name: item.name,
+        description: item.description,
     }));
 };
 
-// 4. Sağlık Kısıtlamalarını Getir
-export const getLimitationsService = async () => {
-    const items = await prisma.healthLimitation.findMany({
+// 4. Sağlık Kısıtlamalarını Getir (GÜNCELLENDİ)
+export const getLimitationsService = async (languageCode: string) => {
+    const items = await prisma.healthLimitationTranslation.findMany({
+        where: {
+            languageCode: languageCode,
+        },
         select: {
-            healthLimitationId: true,
+            healthLimitationId: true, // Ana ID
             name: true,
+            description: true
         },
         orderBy: {
             name: 'asc',
@@ -71,5 +93,6 @@ export const getLimitationsService = async () => {
     return items.map((item) => ({
         id: item.healthLimitationId,
         name: item.name,
+        description: item.description,
     }));
 };

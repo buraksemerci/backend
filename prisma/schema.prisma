@@ -1,3 +1,8 @@
+// Dosya: prisma/schema.prisma
+// --------------------------
+// (TÜM MODELLERİ İÇEREN SON HAL)
+// --------------------------
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,7 +14,6 @@ datasource db {
 
 // --- AUTH MODELLERİ (Bunlar Değişmedi) ---
 model EmailVerificationToken {
-  // ... (içerik aynı)
   verificationTokenId Int      @id @default(autoincrement())
   tokenHash           String   @db.NVarChar(256)
   expiresAt           DateTime
@@ -24,7 +28,6 @@ model EmailVerificationToken {
 }
 
 model PasswordResetToken {
-  // ... (içerik aynı)
   resetTokenId Int      @id @default(autoincrement())
   tokenHash    String   @db.NVarChar(256)
   expiresAt    DateTime
@@ -33,13 +36,12 @@ model PasswordResetToken {
   sendCount    Int      @default(1)
   requestIP    String   @db.NVarChar(45)
   userAgent    String   @db.NVarChar(512)
-  failedAttempts Int    @default(0)
+  failedAttempts Int     @default(0)
   userId       String   @db.UniqueIdentifier
   User         User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
 }
 
 model UserExternalLogin {
-  // ... (içerik aynı)
   id            Int    @id @default(autoincrement())
   loginProvider String @db.NVarChar(50)
   providerKey   String @db.NVarChar(255)
@@ -50,7 +52,6 @@ model UserExternalLogin {
 }
 
 model UserLocalCredential {
-  // ... (içerik aynı)
   userId       String @id @db.UniqueIdentifier
   passwordHash String @db.NVarChar(Max)
   User         User   @relation(fields: [userId], references: [userId], onDelete: Cascade)
@@ -59,12 +60,7 @@ model UserLocalCredential {
 model RefreshToken {
   refreshTokenId Int      @id @default(autoincrement())
   tokenHash      String   @unique @db.NVarChar(256)
-  
-  // --- YENİ ALAN ---
-  // Mobil uygulamanın üreteceği ve saklayacağı (örn: AsyncStorage) unique bir ID
   deviceId       String   @db.NVarChar(255)
-  // ---------------
-
   expiresAt      DateTime
   isUsed         Boolean  @default(false)
   createdAt      DateTime @default(now())
@@ -73,10 +69,8 @@ model RefreshToken {
   userId         String   @db.UniqueIdentifier
   User           User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
-  // --- YENİ KURAL ---
   // Bir kullanıcının bir cihazda sadece 1 token'ı olabilir
   @@unique([userId, deviceId])
-  // ---------------
 }
 
 
@@ -100,7 +94,7 @@ model User {
   Body    UserBody?
   Goal    UserGoal?
   Setting UserSetting?
-
+  
   // YENİ PROFİL İLİŞKİLERİ (M:N via Junction Tables)
   HealthLimitations  UserHealthLimitation[]
   TargetBodyParts    UserGoalPart[]
@@ -118,7 +112,7 @@ model UserProfile {
   firstName String   @db.NVarChar(100)
   lastName  String   @db.NVarChar(100)
   birthDate DateTime @db.Date
-  gender    String   @db.NVarChar(50) // <-- ENUM'DAN STRİNG'E DÜZELTİLDİ
+  gender    String   @db.NVarChar(50)
 
   User User @relation(fields: [userId], references: [userId], onDelete: Cascade)
 }
@@ -127,15 +121,15 @@ model UserBody {
   userId        String  @id @db.UniqueIdentifier
   heightCM      Decimal @db.Decimal(5, 2)
   weightKG      Decimal @db.Decimal(5, 2)
-  activityLevel String  @db.NVarChar(100) // <-- ENUM'DAN STRİNG'E DÜZELTİLDİ
-  bodyType      String  @db.NVarChar(100) // <-- ENUM'DAN STRİNG'E DÜZELTİLDİ
+  activityLevel String  @db.NVarChar(100)
+  bodyType      String  @db.NVarChar(100)
 
   User User @relation(fields: [userId], references: [userId], onDelete: Cascade)
 }
 
 model UserGoal {
   userId         String   @id @db.UniqueIdentifier
-  primaryGoal    String   @db.NVarChar(100) // <-- ENUM'DAN STRİNG'E DÜZELTİLDİ
+  primaryGoal    String   @db.NVarChar(100)
   targetWeightKG Decimal? @db.Decimal(5, 2)
 
   User User @relation(fields: [userId], references: [userId], onDelete: Cascade)
@@ -143,53 +137,120 @@ model UserGoal {
 
 model UserSetting {
   userId            String @id @db.UniqueIdentifier
-  preferredUnit     String @db.NVarChar(10) // <-- ENUM'DAN STRİNG'E DÜZELTİLDİ
+  preferredUnit     String @db.NVarChar(10)
   preferredLanguage String @db.NVarChar(10) @default("tr")
-  theme             String @db.NVarChar(10) @default("system") // <-- ENUM'DAN STRİNG'E DÜZELTİLDİ
+  theme             String @db.NVarChar(10) @default("system")
 
   User User @relation(fields: [userId], references: [userId], onDelete: Cascade)
 }
 
 
 // ---------------------------------------------
-// YENİ ANA VERİ TABLOLARI (M:N için)
+// YENİ ANA VERİ TABLOLARI (GÜNCELLENDİ)
+// (Artık "name" sütunları yok)
 // ---------------------------------------------
 
 model HealthLimitation {
   healthLimitationId Int    @id @default(autoincrement())
-  name               String @unique @db.NVarChar(100)
 
-  // İlişki
+  // İlişki (Kullanıcı)
   users UserHealthLimitation[]
+
+  // İlişki (Çeviri) - YENİ
+  translations HealthLimitationTranslation[]
 }
 
 model GoalBodyPart {
   goalBodyPartId Int    @id @default(autoincrement())
-  name           String @unique @db.NVarChar(100)
 
-  // İlişki
+  // İlişki (Kullanıcı)
   users UserGoalPart[]
+
+  // İlişki (Çeviri) - YENİ
+  translations GoalBodyPartTranslation[]
 }
 
 model WorkoutEquipment {
   workoutEquipmentId Int    @id @default(autoincrement())
-  name               String @unique @db.NVarChar(100)
 
-  // İlişki
+  // İlişki (Kullanıcı)
   users UserAvailableWorkoutEquipment[]
+
+  // İlişki (Çeviri) - YENİ
+  translations WorkoutEquipmentTranslation[]
 }
 
 model WorkoutLocation {
   workoutLocationId Int    @id @default(autoincrement())
-  name              String @unique @db.NVarChar(100)
+
+  // İlişki (Kullanıcı)
+  users UserWorkoutLocation[]
+
+  // İlişki (Çeviri) - YENİ
+  translations WorkoutLocationTranslation[]
+}
+
+// ---------------------------------------------
+// YENİ ÇEVİRİ TABLOLARI
+// (Sizin tasarımınıza göre)
+// ---------------------------------------------
+
+model HealthLimitationTranslation {
+  healthLimitationId Int
+  languageCode       String @db.NVarChar(10) // tr, en, de
+  name               String @db.NVarChar(100)
+  description        String? @db.NVarChar(Max)
 
   // İlişki
-  users UserWorkoutLocation[]
+  HealthLimitation HealthLimitation @relation(fields: [healthLimitationId], references: [healthLimitationId], onDelete: Cascade)
+
+  // Bileşik Anahtar
+  @@id([healthLimitationId, languageCode])
+}
+
+model GoalBodyPartTranslation {
+  goalBodyPartId Int
+  languageCode   String @db.NVarChar(10)
+  name           String @db.NVarChar(100)
+  description    String? @db.NVarChar(Max)
+
+  // İlişki
+  GoalBodyPart GoalBodyPart @relation(fields: [goalBodyPartId], references: [goalBodyPartId], onDelete: Cascade)
+
+  // Bileşik Anahtar
+  @@id([goalBodyPartId, languageCode])
+}
+
+model WorkoutEquipmentTranslation {
+  workoutEquipmentId Int
+  languageCode       String @db.NVarChar(10)
+  name               String @db.NVarChar(100)
+  description        String? @db.NVarChar(Max)
+
+  // İlişki
+  WorkoutEquipment WorkoutEquipment @relation(fields: [workoutEquipmentId], references: [workoutEquipmentId], onDelete: Cascade)
+
+  // Bileşik Anahtar
+  @@id([workoutEquipmentId, languageCode])
+}
+
+model WorkoutLocationTranslation {
+  workoutLocationId Int
+  languageCode      String @db.NVarChar(10)
+  name              String @db.NVarChar(100)
+  description       String? @db.NVarChar(Max)
+
+  // İlişki
+  WorkoutLocation WorkoutLocation @relation(fields: [workoutLocationId], references: [workoutLocationId], onDelete: Cascade)
+
+  // Bileşik Anahtar
+  @@id([workoutLocationId, languageCode])
 }
 
 
 // ---------------------------------------------
 // YENİ İLİŞKİ TABLOLARI (M:N Junction Tables)
+// (Bunlar Değişmedi)
 // ---------------------------------------------
 
 model UserHealthLimitation {
