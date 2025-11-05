@@ -10,8 +10,9 @@ import logger from '../utils/logger';
 export const getMyProfileService = async (userId: string) => {
 
     // --- Step 1: Get the user's preferred language ---
-    // (or default to 'tr')
-    let languageCode = 'tr';
+    const FALLBACK_LANG = 'en'; // Son çare dil 'en'
+    let languageCode = 'tr'; // Varsayılan dil 'tr'
+
     try {
         const settings = await prisma.userSetting.findUnique({
             where: { userId },
@@ -24,7 +25,12 @@ export const getMyProfileService = async (userId: string) => {
         logger.warn(e, `Could not find language setting for user ${userId}, defaulting to 'tr'.`);
     }
 
-    // --- Step 2: Fetch all data based on the user's language ---
+    // --- YENİ: Denenecek dillerin listesi ---
+    const languagesToTry = [...new Set([languageCode, FALLBACK_LANG])];
+    // Not: 'tr' zaten languageCode'un varsayılanı, o yüzden tekrar eklemeye gerek yok.
+    // Eğer varsayılan 'tr' olmasaydı: [...new Set([languageCode, 'tr', FALLBACK_LANG])]
+
+    // --- Step 2: Fetch all data based on the user's language (GÜNCELLENDİ) ---
     const userProfile = await prisma.user.findUnique({
         where: { userId },
         select: {
@@ -35,23 +41,22 @@ export const getMyProfileService = async (userId: string) => {
             isEmailVerified: true,
             createdAt: true,
 
-            // 1:1 Related data (These haven't changed)
-            Profile: true, // UserProfile table
-            Body: true,    // UserBody table
-            Goal: true,    // UserGoal table
-            Setting: true, // UserSetting table
+            // 1:1 Related data
+            Profile: true,
+            Body: true,
+            Goal: true,
+            Setting: true,
 
-            // --- Step 3: M:N Related data (REWRITTEN) ---
-            // Now looks at '...Translation' table for 'name'
+            // --- Step 3: M:N Related data (GÜNCELLENDİ) ---
             HealthLimitations: {
                 select: {
                     HealthLimitation: {
                         select: {
                             healthLimitationId: true,
-                            // FILTER by language from the 'translations' relation
+                            // DİLLERİ FİLTRELE
                             translations: {
-                                where: { languageCode: languageCode },
-                                select: { name: true, description: true }
+                                where: { languageCode: { in: languagesToTry } },
+                                select: { name: true, description: true, languageCode: true } // languageCode'u al
                             }
                         },
                     },
@@ -63,8 +68,8 @@ export const getMyProfileService = async (userId: string) => {
                         select: {
                             goalBodyPartId: true,
                             translations: {
-                                where: { languageCode: languageCode },
-                                select: { name: true, description: true }
+                                where: { languageCode: { in: languagesToTry } },
+                                select: { name: true, description: true, languageCode: true }
                             }
                         },
                     },
@@ -76,8 +81,8 @@ export const getMyProfileService = async (userId: string) => {
                         select: {
                             workoutEquipmentId: true,
                             translations: {
-                                where: { languageCode: languageCode },
-                                select: { name: true, description: true }
+                                where: { languageCode: { in: languagesToTry } },
+                                select: { name: true, description: true, languageCode: true }
                             }
                         },
                     },
@@ -89,8 +94,8 @@ export const getMyProfileService = async (userId: string) => {
                         select: {
                             workoutLocationId: true,
                             translations: {
-                                where: { languageCode: languageCode },
-                                select: { name: true, description: true }
+                                where: { languageCode: { in: languagesToTry } },
+                                select: { name: true, description: true, languageCode: true }
                             }
                         },
                     },
@@ -99,39 +104,50 @@ export const getMyProfileService = async (userId: string) => {
         },
     });
 
-    // 2. If user not found
     if (!userProfile) {
         throw new Error('USER_NOT_FOUND');
     }
 
-    // --- Step 4: Clean up the data (flatten M:N data into a simple array) ---
-    // (Now we need to fix the complex 'translations' array)
+    // --- Step 4: Clean up the data (GÜNCELLENDİ - DİL ÖNCELİKLENDİRME) ---
     const formattedProfile = {
         ...userProfile,
-        // Corrected format: { id: 1, name: "Name in User's Language" }
-        HealthLimitations: userProfile.HealthLimitations.map(item => ({
-            id: item.HealthLimitation.healthLimitationId,
-            name: item.HealthLimitation.translations[0]?.name || 'N/A',
-            description: item.HealthLimitation.translations[0]?.description || null,
-        })),
-        TargetBodyParts: userProfile.TargetBodyParts.map(item => ({
-            id: item.GoalBodyPart.goalBodyPartId,
-            name: item.GoalBodyPart.translations[0]?.name || 'N/A',
-            description: item.GoalBodyPart.translations[0]?.description || null,
-        })),
-        AvailableEquipment: userProfile.AvailableEquipment.map(item => ({
-            id: item.WorkoutEquipment.workoutEquipmentId,
-            name: item.WorkoutEquipment.translations[0]?.name || 'N/A',
-            description: item.WorkoutEquipment.translations[0]?.description || null,
-        })),
-        WorkoutLocations: userProfile.WorkoutLocations.map(item => ({
-            id: item.WorkoutLocation.workoutLocationId,
-            name: item.WorkoutLocation.translations[0]?.name || 'N/A',
-            description: item.WorkoutLocation.translations[0]?.description || null,
-        })),
+        HealthLimitations: userProfile.HealthLimitations.map(item => {
+            const t = item.HealthLimitation.translations.find(tr => tr.languageCode === languageCode) ||
+                item.HealthLimitation.translations.find(tr => tr.languageCode === FALLBACK_LANG);
+            return {
+                id: item.HealthLimitation.healthLimitationId,
+                name: t?.name || 'N/A',
+                description: t?.description || null,
+            };
+        }),
+        TargetBodyParts: userProfile.TargetBodyParts.map(item => {
+            const t = item.GoalBodyPart.translations.find(tr => tr.languageCode === languageCode) ||
+                item.GoalBodyPart.translations.find(tr => tr.languageCode === FALLBACK_LANG);
+            return {
+                id: item.GoalBodyPart.goalBodyPartId,
+                name: t?.name || 'N/A',
+                description: t?.description || null,
+            };
+        }),
+        AvailableEquipment: userProfile.AvailableEquipment.map(item => {
+            const t = item.WorkoutEquipment.translations.find(tr => tr.languageCode === languageCode) ||
+                item.WorkoutEquipment.translations.find(tr => tr.languageCode === FALLBACK_LANG);
+            return {
+                id: item.WorkoutEquipment.workoutEquipmentId,
+                name: t?.name || 'N/A',
+                description: t?.description || null,
+            };
+        }),
+        WorkoutLocations: userProfile.WorkoutLocations.map(item => {
+            const t = item.WorkoutLocation.translations.find(tr => tr.languageCode === languageCode) ||
+                item.WorkoutLocation.translations.find(tr => tr.languageCode === FALLBACK_LANG);
+            return {
+                id: item.WorkoutLocation.workoutLocationId,
+                name: t?.name || 'N/A',
+                description: t?.description || null,
+            };
+        }),
     };
 
     return formattedProfile;
 };
-
-// TODO: 'updateMyProfileService' will be added here in the future

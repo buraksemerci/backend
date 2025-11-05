@@ -112,13 +112,13 @@ export const registerUserService = async (
                 logger.info(`Smart Registration: Overwriting unverified user ${existingUser.userId}...`);
                 userId = existingUser.userId;
 
-                // Update main User and Password
+                // Sadece ana User ve Password bilgilerini güncelle
                 await tx.user.update({
                     where: { userId },
                     data: {
                         username: input.username,
                         email: input.email,
-                        createdAt: new Date(),
+                        createdAt: new Date(), // Kayıt tarihini yenile
                     },
                 });
                 await tx.userLocalCredential.upsert({
@@ -126,6 +126,11 @@ export const registerUserService = async (
                     create: { userId, passwordHash },
                     update: { passwordHash },
                 });
+
+                // --- DEĞİŞİKLİK ---
+                // _createOrUpdateProfileData çağrısı buradan kaldırıldı.
+                // Mevcut kullanıcının profil verilerine dokunmuyoruz.
+                // --- DEĞİŞİKLİK SONU ---
 
             } else {
                 logger.info(`Clean Registration: Creating new user for ${input.email}...`);
@@ -146,11 +151,16 @@ export const registerUserService = async (
                         passwordHash,
                     },
                 });
+
+                // --- DEĞİŞİKLİK ---
+                // Profil verisi oluşturma işlemi SADECE
+                // "Clean Registration" (yeni kullanıcı) akışında yapılmalı.
+                await _createOrUpdateProfileData(tx, userId, input);
+                // --- DEĞİŞİKLİK SONU ---
             }
 
-            // --- CHANGE: HELPER FUNCTION CALLED ---
-            await _createOrUpdateProfileData(tx, userId, input);
-            // --- END CHANGE ---
+            // --- DEĞİŞİKLİK: Bu kod bloğu IF/ELSE dışına taşındı ---
+            // Her iki durumda da (Smart veya Clean) yeni kod gönderilmeli.
 
             // 7. Verification Code
             const code = generateSixDigitCode();
@@ -215,6 +225,7 @@ export const loginUserService = async (
 ) => {
     const { loginIdentifier, password } = input;
 
+    // --- DEĞİŞİKLİK: 'include' yerine 'select' kullanıldı ---
     const user = await prisma.user.findFirst({
         where: {
             OR: [
@@ -222,10 +233,17 @@ export const loginUserService = async (
                 { username: loginIdentifier }
             ],
         },
-        include: {
-            UserLocalCredential: true,
+        select: {
+            userId: true,
+            isEmailVerified: true,
+            UserLocalCredential: {
+                select: {
+                    passwordHash: true
+                }
+            }
         },
     });
+    // --- DEĞİŞİKLİK SONU ---
 
     if (!user) {
         throw new Error('INVALID_CREDENTIALS');
@@ -243,6 +261,8 @@ export const loginUserService = async (
     }
 
     logger.info(`User logged in: ${user.userId}, Verified: ${user.isEmailVerified}`);
+
+    // Kodun geri kalanı (token oluşturma ve kaydetme) aynı kalır...
     const tokens = await signTokens(user.userId, user.isEmailVerified);
 
     const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
@@ -273,6 +293,7 @@ export const verifyEmailCodeService = async (
     userAgent: string,
     deviceId: string
 ) => {
+    // 1. Token'ı ve kullanıcıyı getir
     const userWithToken = await prisma.user.findUnique({
         where: { userId },
         include: {
@@ -283,17 +304,45 @@ export const verifyEmailCodeService = async (
     });
 
     const tokenRecord = userWithToken?.EmailVerificationToken[0];
+
+    // 2. Temel kontroller
     if (!tokenRecord || tokenRecord.expiresAt < new Date()) {
         throw new Error('INVALID_CODE');
     }
     if (userWithToken?.isEmailVerified) {
         throw new Error('ALREADY_VERIFIED');
     }
+
+    // 3. Kod eşleşmesini kontrol et
     const codeMatch = await bcrypt.compare(code, tokenRecord.tokenHash);
+
+    // --- YENİ BRUTE-FORCE KORUMASI ---
     if (!codeMatch) {
+        const MAX_ATTEMPTS = 5; // Maksimum 5 deneme
+        const newAttemptCount = tokenRecord.failedAttempts + 1;
+
+        if (newAttemptCount >= MAX_ATTEMPTS) {
+            // Çok fazla deneme yapıldı, token'ı geçersiz kıl
+            await prisma.emailVerificationToken.update({
+                where: { verificationTokenId: tokenRecord.verificationTokenId },
+                data: { isUsed: true, failedAttempts: newAttemptCount }, // Hem kilitle hem sayacı güncelle
+            });
+            logger.warn(
+                `[VerifyEmail] Token has been invalidated due to reaching the maximum number of attempts: ${userId}`
+            );
+        } else {
+            // Sadece deneme sayacını artır
+            await prisma.emailVerificationToken.update({
+                where: { verificationTokenId: tokenRecord.verificationTokenId },
+                data: { failedAttempts: newAttemptCount },
+            });
+        }
+        // Her durumda hatayı fırlat
         throw new Error('INVALID_CODE');
     }
+    // --- KORUMA SONU ---
 
+    // 4. Başarılı: Kullanıcıyı doğrula ve token'ı kullanıldı olarak işaretle
     await prisma.$transaction(async (tx) => {
         await tx.user.update({
             where: { userId },
@@ -305,6 +354,7 @@ export const verifyEmailCodeService = async (
         });
     });
 
+    // 5. Yeni token setini oluştur ve döndür (Mevcut kodunuz)
     logger.info(`User verified: ${userId}`);
     const tokens = await signTokens(userId, true);
 
@@ -409,6 +459,7 @@ export const forgotPasswordService = async (
 export const resetPasswordService = async (input: ResetPasswordInput['body']) => {
     const { email, code, newPassword } = input;
 
+    // 1. Token'ı ve kullanıcıyı getir
     const userWithToken = await prisma.user.findUnique({
         where: { email },
         include: {
@@ -422,18 +473,47 @@ export const resetPasswordService = async (input: ResetPasswordInput['body']) =>
         },
     });
 
+    // 2. Temel kontroller
     const tokenRecord = userWithToken?.PasswordResetToken[0];
     if (!tokenRecord) {
         throw new Error('INVALID_CODE');
     }
+
+    // 3. Kod eşleşmesini kontrol et
     const codeMatch = await bcrypt.compare(code, tokenRecord.tokenHash);
+
+    // --- YENİ BRUTE-FORCE KORUMASI ---
     if (!codeMatch) {
+        const MAX_ATTEMPTS = 5; // Maksimum 5 deneme
+        const newAttemptCount = tokenRecord.failedAttempts + 1;
+
+        if (newAttemptCount >= MAX_ATTEMPTS) {
+            // Çok fazla deneme yapıldı, token'ı geçersiz kıl
+            await prisma.passwordResetToken.update({
+                where: { resetTokenId: tokenRecord.resetTokenId },
+                data: { isUsed: true, failedAttempts: newAttemptCount },
+            });
+            logger.warn(
+                `[ResetPassword] Token has been invalidated due to reaching the maximum number of attempts: ${userWithToken.userId}`
+            );
+        } else {
+            // Sadece deneme sayacını artır
+            await prisma.passwordResetToken.update({
+                where: { resetTokenId: tokenRecord.resetTokenId },
+                data: { failedAttempts: newAttemptCount },
+            });
+        }
+        // Her durumda hatayı fırlat
         throw new Error('INVALID_CODE');
     }
+    // --- KORUMA SONU ---
+
+    // 4. Diğer kontroller
     if (!userWithToken.UserLocalCredential) {
         throw new Error('NO_LOCAL_ACCOUNT');
     }
 
+    // 5. Başarılı: Şifreyi güncelle ve token'ı kullanıldı yap
     const newPasswordHash = await bcrypt.hash(newPassword, 12);
 
     await prisma.$transaction(async (tx) => {
