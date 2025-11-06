@@ -3,7 +3,6 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import express, { Request, Response, NextFunction } from 'express';
-import cors from 'cors';
 import apiRouter from './api/index';
 import logger from './utils/logger';
 import pinoHttp from 'pino-http';
@@ -12,28 +11,48 @@ import { Prisma } from '@prisma/client';
 
 const app = express();
 
-app.set('trust proxy', 1);
+// Manual CORS - FIRST middleware, before everything else
+app.use((req, res, next) => {
+    // Set CORS headers for all requests
+    const origin = req.headers.origin;
+    res.header('Access-Control-Allow-Origin', origin || '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Max-Age', '86400');
+
+    // Handle OPTIONS requests (CORS preflight)
+    if (req.method === 'OPTIONS') {
+        return res.status(204).end();
+    }
+
+    next();
+});
 
 // Middlewares
 app.use(express.json());
-// CORS configuration - allow all origins for development
-app.use(cors({
-    origin: true, // Allow all origins
-    credentials: true, // Allow credentials
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-}));
+app.use(express.urlencoded({ extended: true }));
 
-// --- NEW Logger Middleware ---
+// Logger Middleware
 app.use(pinoHttp({ logger }));
 
-// Simple health check endpoint
+// Health check endpoint
 app.get('/health', (req, res) => {
     res.status(200).send('API is healthy and running!');
 });
 
 // === MAIN API ROUTING ===
 app.use('/api/v1', apiRouter);
+
+// 404 handler for unmatched routes - MUST be after all routes
+app.use((req, res) => {
+    logger.warn({ method: req.method, path: req.path }, 'Route not found');
+    res.status(404).json({
+        status: 'error',
+        code: 'ROUTE_NOT_FOUND',
+        message: `Route ${req.method} ${req.path} not found`,
+    });
+});
 
 // --- NEW GLOBAL ERROR HANDLER ---
 // (Express 5 routes async errors here automatically)

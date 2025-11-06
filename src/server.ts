@@ -10,8 +10,17 @@ try {
 
     // 2. Start the server
     const PORT = env.PORT;
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
         logger.info(`[Server]: Server is running at http://localhost:${PORT}`);
+    });
+
+    server.on('error', (error: any) => {
+        if (error.code === 'EADDRINUSE') {
+            logger.error(`Port ${PORT} is already in use!`);
+        } else {
+            logger.error(error, 'Server error');
+        }
+        process.exit(1);
     });
 
 } catch (error) {

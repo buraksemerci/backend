@@ -17,7 +17,10 @@ export const publicApiLimiter = rateLimit({
     statusCode: 429, // Explicitly set status code for rate limit exceeded
     skip: (req) => {
         // Skip rate limiting for OPTIONS requests (CORS preflight)
-        return req.method === 'OPTIONS';
+        if (req.method === 'OPTIONS') {
+            return true;
+        }
+        return false;
     },
 });
 /**
@@ -36,6 +39,9 @@ export const authLimiter = rateLimit({
     statusCode: 429, // Explicitly set status code for rate limit exceeded
     skip: (req) => {
         // Skip rate limiting for OPTIONS requests (CORS preflight)
-        return req.method === 'OPTIONS';
+        if (req.method === 'OPTIONS') {
+            return true;
+        }
+        return false;
     },
 });

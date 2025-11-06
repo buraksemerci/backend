@@ -82,29 +82,44 @@ const getTranslatedMasterData = async (
  */
 const getAudienceFilteredData = async (
     model: any, // örn: prisma.healthLimitation
-    idField: string,
+    idField: string, // örn: 'healthLimitationId'
     contentType: string, // örn: CONTENT_TYPES.LIMITATION
     languageCode: string,
     genderId: number | null = null,
 ) => {
     const languages = getLanguagesToTry(languageCode);
 
-    // Filtreleme mantığını oluştur (Öneri 3b)
+    // 1. ContentAudience tablosu için filtre oluştur
     const audienceFilter: any = {
-        some: {
-            contentType: contentType,
-        },
+        contentType: contentType,
     };
 
-    // Eğer bir cinsiyet ('male', 'female', 'unknown') geldiyse,
-    // sadece o cinsiyete veya 'all' (herkes) olarak işaretlenmiş olanları getir.
+    // 2. Cinsiyet filtresi geldiyse, bu filtreyi ContentAudience'a uygula
     if (genderId) {
-        audienceFilter.some.genderId = { in: [genderId, GENDER_IDS.ALL] };
+        audienceFilter.genderId = { in: [genderId, GENDER_IDS.ALL] };
     }
 
+    // 3. İzin verilen içerik ID'lerinin listesini al
+    const allowedContent = await prisma.contentAudience.findMany({
+        where: audienceFilter,
+        select: {
+            contentId: true,
+        },
+    });
+
+    // 4. Sadece ID'leri bir diziye çıkar
+    const allowedIds = allowedContent.map(item => item.contentId);
+
+    // Eğer hiçbir ID bulunamazsa, boş dizi döndür
+    if (allowedIds.length === 0) {
+        return [];
+    }
+
+    // 5. Ana modeli (GoalBodyPart, HealthLimitation vb.)
+    //    bu izin verilen ID listesine göre filtrele
     const items = await model.findMany({
         where: {
-            ContentAudience: audienceFilter,
+            [idField]: { in: allowedIds }, // DİNAMİK ID FİLTRESİ (örn: where: { goalBodyPartId: { in: [...] } })
         },
         select: {
             [idField]: true,
