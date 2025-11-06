@@ -2,17 +2,60 @@
 import prisma from '../utils/prisma';
 import logger from '../utils/logger';
 
+// --- YARDIMCI FONKSİYONLAR ---
+// (public.service.ts'deki mantığın aynısı, çevirileri tutarlı işlemek için)
+
+const DEFAULT_LANG = 'tr';
+const FALLBACK_LANG = 'en';
+
 /**
- * Fetches all profile data for the logged-in user.
- * (Base User info, 1:1 Profile, Body, Goal, Settings, and M:N relations)
- * @param {string} userId - The user ID from the JWT
+ * Veritabanında sorgulanacak dillerin öncelik sırasını belirler.
+ * @param languageCode Kullanıcının tercih ettiği dil (örn: 'de')
+ * @returns Denenecek dillerin dizisi (örn: ['de', 'tr', 'en'])
+ */
+const getLanguagesToTry = (languageCode: string) => {
+    return [...new Set([languageCode, DEFAULT_LANG, FALLBACK_LANG])];
+};
+
+type Translation = {
+    name: string;
+    description?: string | null;
+    languageCode: string;
+};
+
+/**
+ * Bir çeviri dizisinden, istenen dile veya yedek dillere göre
+ * en uygun çeviriyi seçer.
+ * @param translations Veritabanından gelen çeviri dizisi
+ * @param languageCode Kullanıcının tercih ettiği dil
+ * @returns En uygun çeviri nesnesi (veya varsayılan)
+ */
+const getPreferredTranslation = (
+    translations: Translation[],
+    languageCode: string,
+) => {
+    const t =
+        translations.find((tr) => tr.languageCode === languageCode) ||
+        translations.find((tr) => tr.languageCode === DEFAULT_LANG) ||
+        translations.find((tr) => tr.languageCode === FALLBACK_LANG);
+
+    return {
+        name: t?.name || 'N/A',
+        description: t?.description || null,
+    };
+};
+
+// --- ANA PROFİL SERVİSİ (GÜNCELLENDİ) ---
+
+/**
+ * Giriş yapmış kullanıcının TÜM normalize edilmiş profil verilerini
+ * (1:1, M:N, Çeviriler) getirir.
+ * @param {string} userId - JWT'den gelen kullanıcı UUID'si
  */
 export const getMyProfileService = async (userId: string) => {
 
-    // --- Step 1: Get the user's preferred language ---
-    const FALLBACK_LANG = 'en'; // Son çare dil 'en'
-    let languageCode = 'tr'; // Varsayılan dil 'tr'
-
+    // --- Adım 1: Kullanıcının tercih ettiği dili bul ---
+    let languageCode = DEFAULT_LANG;
     try {
         const settings = await prisma.userSetting.findUnique({
             where: { userId },
@@ -22,55 +65,70 @@ export const getMyProfileService = async (userId: string) => {
             languageCode = settings.preferredLanguage;
         }
     } catch (e) {
-        logger.warn(e, `Could not find language setting for user ${userId}, defaulting to 'tr'.`);
+        logger.warn(e, `[ProfileService] ${userId} için dil ayarı bulunamadı, varsayılan 'tr' kullanılıyor.`);
     }
 
-    // --- YENİ: Denenecek dillerin listesi ---
-    const languagesToTry = [...new Set([languageCode, FALLBACK_LANG])];
-    // Not: 'tr' zaten languageCode'un varsayılanı, o yüzden tekrar eklemeye gerek yok.
-    // Eğer varsayılan 'tr' olmasaydı: [...new Set([languageCode, 'tr', FALLBACK_LANG])]
+    const languagesToTry = getLanguagesToTry(languageCode);
 
-    // --- Step 2: Fetch all data based on the user's language (GÜNCELLENDİ) ---
+    // --- Adım 2: Tüm veriyi yeni şemaya göre çek (GÜNCELLENDİ) ---
     const userProfile = await prisma.user.findUnique({
         where: { userId },
         select: {
-            // Base User data
+            // Temel Kullanıcı verisi
             userId: true,
             email: true,
             username: true,
             isEmailVerified: true,
             createdAt: true,
 
-            // 1:1 Related data
-            Profile: true,
-            Body: true,
-            Goal: true,
-            Setting: true,
+            // 1:1 Normalize Edilmiş Veriler (GÜNCELLENDİ)
+            Profile: {
+                include: {
+                    Gender: true, // Cinsiyet (ID + Key)
+                },
+            },
+            Body: {
+                include: {
+                    ActivityLevel: { include: { translations: { where: { languageCode: { in: languagesToTry } } } } },
+                    BodyType: { include: { translations: { where: { languageCode: { in: languagesToTry } } } } },
+                    FitnessLevel: { include: { translations: { where: { languageCode: { in: languagesToTry } } } } },
+                },
+            },
+            Goal: {
+                include: {
+                    GoalType: { include: { translations: { where: { languageCode: { in: languagesToTry } } } } },
+                },
+            },
+            Setting: true, // Ayarlar (1:1)
+            ProgramPreference: { // Tercihler (1:1)
+                include: {
+                    PreferredEquipment: { include: { translations: { where: { languageCode: { in: languagesToTry } } } } }
+                }
+            },
 
-            // --- Step 3: M:N Related data (GÜNCELLENDİ) ---
-            HealthLimitations: {
+            // M:N İlişkili Veriler (Sorgu mantığı aynı, ID'ler artık UUID)
+            HealthLimitation: {
                 select: {
                     HealthLimitation: {
                         select: {
                             healthLimitationId: true,
-                            // DİLLERİ FİLTRELE
                             translations: {
                                 where: { languageCode: { in: languagesToTry } },
-                                select: { name: true, description: true, languageCode: true } // languageCode'u al
-                            }
+                                select: { name: true, description: true, languageCode: true },
+                            },
                         },
                     },
                 },
             },
-            TargetBodyParts: {
+            TargetBodyPart: {
                 select: {
                     GoalBodyPart: {
                         select: {
                             goalBodyPartId: true,
                             translations: {
                                 where: { languageCode: { in: languagesToTry } },
-                                select: { name: true, description: true, languageCode: true }
-                            }
+                                select: { name: true, description: true, languageCode: true },
+                            },
                         },
                     },
                 },
@@ -82,21 +140,21 @@ export const getMyProfileService = async (userId: string) => {
                             workoutEquipmentId: true,
                             translations: {
                                 where: { languageCode: { in: languagesToTry } },
-                                select: { name: true, description: true, languageCode: true }
-                            }
+                                select: { name: true, description: true, languageCode: true },
+                            },
                         },
                     },
                 },
             },
-            WorkoutLocations: {
+            WorkoutLocation: {
                 select: {
                     WorkoutLocation: {
                         select: {
                             workoutLocationId: true,
                             translations: {
                                 where: { languageCode: { in: languagesToTry } },
-                                select: { name: true, description: true, languageCode: true }
-                            }
+                                select: { name: true, description: true, languageCode: true },
+                            },
                         },
                     },
                 },
@@ -108,45 +166,81 @@ export const getMyProfileService = async (userId: string) => {
         throw new Error('USER_NOT_FOUND');
     }
 
-    // --- Step 4: Clean up the data (GÜNCELLENDİ - DİL ÖNCELİKLENDİRME) ---
+    // --- Adım 3: Veriyi temizle ve formatla (GÜNCELLENDİ) ---
+
+    // Helper: 1:1 ilişkilerdeki çevirileri temizler
+    const formatTranslatedField = (field: { translations: Translation[] } | null | undefined) => {
+        if (!field) return null;
+        return getPreferredTranslation(field.translations, languageCode).name;
+    };
+
+    // Helper: M:N ilişkilerdeki çevirileri temizler
+    const formatTranslatedList = (list: any[], relationName: string, idField: string) => {
+        return list.map((item) => {
+            const entity = item[relationName];
+            const t = getPreferredTranslation(entity.translations, languageCode);
+            return {
+                id: entity[idField], // Artık bir UUID
+                name: t.name,
+                description: t.description,
+            };
+        });
+    };
+
     const formattedProfile = {
-        ...userProfile,
-        HealthLimitations: userProfile.HealthLimitations.map(item => {
-            const t = item.HealthLimitation.translations.find(tr => tr.languageCode === languageCode) ||
-                item.HealthLimitation.translations.find(tr => tr.languageCode === FALLBACK_LANG);
-            return {
-                id: item.HealthLimitation.healthLimitationId,
-                name: t?.name || 'N/A',
-                description: t?.description || null,
-            };
-        }),
-        TargetBodyParts: userProfile.TargetBodyParts.map(item => {
-            const t = item.GoalBodyPart.translations.find(tr => tr.languageCode === languageCode) ||
-                item.GoalBodyPart.translations.find(tr => tr.languageCode === FALLBACK_LANG);
-            return {
-                id: item.GoalBodyPart.goalBodyPartId,
-                name: t?.name || 'N/A',
-                description: t?.description || null,
-            };
-        }),
-        AvailableEquipment: userProfile.AvailableEquipment.map(item => {
-            const t = item.WorkoutEquipment.translations.find(tr => tr.languageCode === languageCode) ||
-                item.WorkoutEquipment.translations.find(tr => tr.languageCode === FALLBACK_LANG);
-            return {
-                id: item.WorkoutEquipment.workoutEquipmentId,
-                name: t?.name || 'N/A',
-                description: t?.description || null,
-            };
-        }),
-        WorkoutLocations: userProfile.WorkoutLocations.map(item => {
-            const t = item.WorkoutLocation.translations.find(tr => tr.languageCode === languageCode) ||
-                item.WorkoutLocation.translations.find(tr => tr.languageCode === FALLBACK_LANG);
-            return {
-                id: item.WorkoutLocation.workoutLocationId,
-                name: t?.name || 'N/A',
-                description: t?.description || null,
-            };
-        }),
+        // Temel veriler
+        userId: userProfile.userId,
+        email: userProfile.email,
+        username: userProfile.username,
+        isEmailVerified: userProfile.isEmailVerified,
+        createdAt: userProfile.createdAt,
+
+        // 1:1 Normalize edilmiş veriler
+        Profile: {
+            firstName: userProfile.Profile?.firstName,
+            lastName: userProfile.Profile?.lastName,
+            birthDate: userProfile.Profile?.birthDate,
+            gender: userProfile.Profile?.Gender?.key, // 'genderId' (Int) yerine 'gender' (String "male") gönder
+        },
+        Body: {
+            heightCM: userProfile.Body?.heightCM,
+            weightKG: userProfile.Body?.weightKG,
+            activityLevel: formatTranslatedField(userProfile.Body?.ActivityLevel), // 'activityLevelId' yerine çevrilmiş 'name'
+            bodyType: formatTranslatedField(userProfile.Body?.BodyType),
+            fitnessLevel: formatTranslatedField(userProfile.Body?.FitnessLevel),
+        },
+        Goal: {
+            primaryGoal: formatTranslatedField(userProfile.Goal?.GoalType), // 'goalTypeId' yerine çevrilmiş 'name'
+            targetWeightKG: userProfile.Goal?.targetWeightKG,
+        },
+        Setting: userProfile.Setting,
+        ProgramPreference: {
+            workoutDuration: userProfile.ProgramPreference?.workoutDuration,
+            startWithWarmup: userProfile.ProgramPreference?.startWithWarmup,
+            preferredEquipment: formatTranslatedField(userProfile.ProgramPreference?.PreferredEquipment)
+        },
+
+        // M:N Çevrilmiş veriler
+        HealthLimitations: formatTranslatedList(
+            userProfile.HealthLimitation,
+            'HealthLimitation',
+            'healthLimitationId'
+        ),
+        TargetBodyParts: formatTranslatedList(
+            userProfile.TargetBodyPart,
+            'GoalBodyPart',
+            'goalBodyPartId'
+        ),
+        AvailableEquipment: formatTranslatedList(
+            userProfile.AvailableEquipment,
+            'WorkoutEquipment',
+            'workoutEquipmentId'
+        ),
+        WorkoutLocations: formatTranslatedList(
+            userProfile.WorkoutLocation,
+            'WorkoutLocation',
+            'workoutLocationId'
+        ),
     };
 
     return formattedProfile;
