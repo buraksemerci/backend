@@ -1,5 +1,5 @@
 // Dosya: prisma/schema.prisma
-// (Analiz 2b, 2e, 3b, UUID'ler ve Soft Delete dahil TÜM geliştirmeleri içeren NİHAİ SÜRÜM)
+// (Tüm ana veri tabloları tutarlılık için manuel 'Int @id' kullanacak şekilde güncellendi)
 
 generator client {
   provider = "prisma-client-js"
@@ -11,14 +11,12 @@ datasource db {
 }
 
 // ========================================================================
-// 1. ANA VERİ MODELLERİ (Normalizasyon için [Öneri 2b])
+// 1. ANA VERİ MODELLERİ (Tümü Int @id)
 // ========================================================================
 
 model Gender {
-  genderId Int    @id // 1 = male, 2 = female, 3 = other, 4 = unknown (Öneri 2e)
+  genderId Int    @id // 1 = male, 2 = female, 3 = other, 4 = unknown
   key      String @unique @db.NVarChar(10)
-
-  // İlişkiler
   UserProfile     UserProfile[]
   ContentAudience ContentAudience[]
   WorkoutAsset    WorkoutAsset[]
@@ -26,7 +24,7 @@ model Gender {
 
 model GoalType {
   goalTypeId   Int    @id
-  key          String @unique @db.NVarChar(50) // "weight_loss", "muscle_gain"
+  key          String @unique @db.NVarChar(50)
   translations GoalTypeTranslation[]
   UserGoal     UserGoal[]
   WorkoutProgram WorkoutProgram[]
@@ -35,21 +33,21 @@ model GoalType {
 
 model BodyType {
   bodyTypeId   Int    @id
-  key          String @unique @db.NVarChar(50) // "ectomorph"
+  key          String @unique @db.NVarChar(50)
   translations BodyTypeTranslation[]
   UserBody     UserBody[]
 }
 
 model ActivityLevel {
   activityLevelId Int    @id
-  key             String @unique @db.NVarChar(50) // "sedentary"
-  translations      ActivityLevelTranslation[]
-  UserBody          UserBody[]
+  key             String @unique @db.NVarChar(50)
+  translations    ActivityLevelTranslation[]
+  UserBody        UserBody[]
 }
 
 model BodyTarget {
   bodyTargetId Int    @id
-  key          String @unique @db.NVarChar(50) // "full_body", "upper_body"
+  key          String @unique @db.NVarChar(50)
   translations BodyTargetTranslation[]
   WorkoutProgram WorkoutProgram[]
   ChallengeWorkoutPlanDay ChallengeWorkoutPlanDay[]
@@ -57,7 +55,7 @@ model BodyTarget {
 
 model WorkoutType {
   workoutTypeId Int    @id
-  key           String @unique @db.NVarChar(50) // "reps", "duration"
+  key           String @unique @db.NVarChar(50)
   translations  WorkoutTypeTranslation[]
   Workout       Workout[]
 }
@@ -73,7 +71,7 @@ model FitnessLevel {
 }
 
 // ========================================================================
-// 2. KULLANICI VE KİMLİK DOĞRULAMA MODELLERİ
+// 2. KULLANICI VE KİMLİK DOĞRULAMA MODELLERİ (Bunlar UUID olarak kalır)
 // ========================================================================
 
 model User {
@@ -89,15 +87,11 @@ model User {
   RefreshToken           RefreshToken[]
   UserExternalLogin      UserExternalLogin[]
   UserLocalCredential    UserLocalCredential?
-
-  // 1:1 Profil (Normalleştirildi)
   Profile           UserProfile?
   Body              UserBody?
   Goal              UserGoal?
   Setting           UserSetting?
   ProgramPreference UserProgramPreference?
-
-  // M:N Profil
   HealthLimitation  UserHealthLimitation[]
   TargetBodyPart    UserGoalPart[]
   AvailableEquipment UserAvailableWorkoutEquipment[]
@@ -109,7 +103,6 @@ model User {
   GeneratedProgram  WorkoutProgram[]      @relation("UserGeneratedPrograms")
 }
 
-// --- Auth Modelleri (Değişiklik Yok) ---
 model UserLocalCredential {
   userId       String @id @db.UniqueIdentifier
   passwordHash String @db.NVarChar(Max)
@@ -140,7 +133,6 @@ model RefreshToken {
 }
 
 model EmailVerificationToken {
-  // ... (Mevcut şema ile aynı)
   verificationTokenId Int      @id @default(autoincrement())
   tokenHash           String   @db.NVarChar(256)
   expiresAt           DateTime
@@ -155,7 +147,6 @@ model EmailVerificationToken {
 }
 
 model PasswordResetToken {
-  // ... (Mevcut şema ile aynı)
   resetTokenId   Int      @id @default(autoincrement())
   tokenHash      String   @db.NVarChar(256)
   expiresAt      DateTime
@@ -169,7 +160,6 @@ model PasswordResetToken {
   User           User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
 }
 
-
 // ========================================================================
 // 3. KULLANICI PROFİL MODELLERİ (1:1 - Normalleştirildi)
 // ========================================================================
@@ -179,11 +169,8 @@ model UserProfile {
   firstName String   @db.NVarChar(100)
   lastName  String   @db.NVarChar(100)
   birthDate DateTime @db.Date
-  
-  // (Öneri 2e) - Zorunlu değil
-  genderId  Int?     
+  genderId  Int?
   Gender    Gender?  @relation(fields: [genderId], references: [genderId])
-  
   User      User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
 }
 
@@ -191,28 +178,20 @@ model UserBody {
   userId        String  @id @db.UniqueIdentifier
   heightCM      Decimal @db.Decimal(5, 2)
   weightKG      Decimal @db.Decimal(5, 2)
-  
-  // (Öneri 2b) - Normalleştirildi
   activityLevelId Int?
   ActivityLevel   ActivityLevel? @relation(fields: [activityLevelId], references: [activityLevelId])
-  
   bodyTypeId    Int?
   BodyType      BodyType?      @relation(fields: [bodyTypeId], references: [bodyTypeId])
-
   fitnessLevelId Int?
-  FitnessLevel   FitnessLevel? @relation(fields: [fitnessLevelId], references: [fitnessLevelId])
-
-  User          User    @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  FitnessLevel   FitnessLevel?  @relation(fields: [fitnessLevelId], references: [fitnessLevelId])
+  User          User           @relation(fields: [userId], references: [userId], onDelete: Cascade)
 }
 
 model UserGoal {
   userId         String   @id @db.UniqueIdentifier
   targetWeightKG Decimal? @db.Decimal(5, 2)
-  
-  // (Öneri 2b) - Normalleştirildi
   goalTypeId Int
   GoalType   GoalType @relation(fields: [goalTypeId], references: [goalTypeId])
-
   User           User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
 }
 
@@ -226,17 +205,17 @@ model UserSetting {
 
 model UserProgramPreference {
   userId          String  @id @db.UniqueIdentifier
-  workoutDuration Int? // 30, 45, 60
+  workoutDuration Int?
   startWithWarmup Boolean @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  // İlişkiler
   User               User               @relation(fields: [userId], references: [userId], onDelete: Cascade)
-  workoutEquipmentId String?            @db.UniqueIdentifier // ID Tipi (UUID) güncellendi
+  
+  // DEĞİŞTİ: String? @db.UniqueIdentifier -> Int?
+  workoutEquipmentId Int? 
   PreferredEquipment WorkoutEquipment?  @relation(fields: [workoutEquipmentId], references: [workoutEquipmentId])
 }
-
 
 // ========================================================================
 // 4. KULLANICI İÇERİK MODELLERİ (Takvim, İlerleme - Soft Delete ile)
@@ -244,15 +223,15 @@ model UserProgramPreference {
 
 model UserProgramAssignment {
   id        Int       @id @default(autoincrement())
-  dayOfWeek Int // 0 = Pazar, 1 = Pazartesi ...
+  dayOfWeek Int
   isRestDay Boolean   @default(false)
-  deletedAt DateTime? // (Öneri 2d) - Soft Delete
+  deletedAt DateTime?
 
-  // İlişkiler
   userId    String   @db.UniqueIdentifier
   User      User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
   
-  programId String?  @db.UniqueIdentifier // ID Tipi (UUID) güncellendi
+  // (Programın kendi ID'si UUID olarak kalıyor, bu doğru)
+  programId String? @db.UniqueIdentifier 
   Program   WorkoutProgram? @relation(fields: [programId], references: [workoutProgramId], onDelete: SetNull, onUpdate: NoAction)
 
   @@unique([userId, dayOfWeek])
@@ -261,56 +240,59 @@ model UserProgramAssignment {
 model UserChallengePlan {
   userChallengePlanId Int      @id @default(autoincrement())
   progressDay         Int      @default(1)
-  status              String   @db.NVarChar(50) // in_progress, completed, abandoned
+  status              String   @db.NVarChar(50) 
   startedAt           DateTime @default(now())
   lastActivityAt      DateTime @updatedAt
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
-  deletedAt           DateTime? // (Öneri 2d) - Soft Delete
+  deletedAt           DateTime?
 
-  // İlişkiler
   userId          String               @db.UniqueIdentifier
   User            User                 @relation(fields: [userId], references: [userId], onDelete: Cascade)
-  challengePlanId String               @db.UniqueIdentifier // ID Tipi (UUID) güncellendi
+  
+  // (ChallengePlan'ın kendi ID'si UUID olarak kalıyor)
+  challengePlanId String               @db.UniqueIdentifier 
   ChallengePlan   ChallengeWorkoutPlan @relation(fields: [challengePlanId], references: [challengePlanId], onDelete: Cascade)
 }
 
-
 // ========================================================================
-// 5. GENEL İÇERİK ANA MODELLERİ (UUID & Esnek Hedefleme ile)
+// 5. GENEL İÇERİK ANA MODELLERİ (İçerik = UUID, Ana Veri = Int)
 // ========================================================================
 
-// YENİ (Öneri 3b) - Esnek Hedefleme Tablosu
 model ContentAudience {
   id             Int      @id @default(autoincrement())
   contentType    String   // "WorkoutProgram", "ChallengeWorkoutPlan", "HealthLimitation"
-  contentId      String   @db.UniqueIdentifier // Hedeflenen içeriğin UUID'si
+  
+  // DEĞİŞTİ: contentId artık hem UUID (program için) hem de Int (limitasyon için) 
+  // olabileceğinden, iki ayrı FK sütunu kullanmak en temizidir.
+  // Ya da, contentType'a göre Int'e çevrilmiş bir String ID tutulur.
+  // SQL Server'da bu zor. En basit çözüm: contentId'yi String tutmak.
+  // Programlar için UUID, Ana Veri için Int'in String halini (örn: "1", "2") tutmak.
+  contentId      String   @db.NVarChar(255) // DEĞİŞTİ (UUID -> NVarChar)
   
   // Kural Alanları
-  genderId       Int?     // 1, 2, 3, 4
+  genderId       Int?
   minAge         Int?
   maxAge         Int?
   fitnessLevelId Int?
-
-  // İlişkiler
+  
   Gender       Gender?       @relation(fields: [genderId], references: [genderId])
   FitnessLevel FitnessLevel? @relation(fields: [fitnessLevelId], references: [fitnessLevelId])
 
-  @@index([contentType, contentId]) // Hızlı içerik arama için
+  @@index([contentType, contentId])
 }
 
-// (Öneri 2a) - ID'ler UUID'ye güncellendi
+// (WorkoutProgram, ChallengeWorkoutPlan, ChallengeWorkoutPlanDay UUID ID'de kalır)
 model WorkoutProgram {
   workoutProgramId String   @id @default(uuid()) @db.UniqueIdentifier
   difficultyLevel  Int
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
-  deletedAt        DateTime? // Program şablonları da silinebilir
+  deletedAt        DateTime?
   
-  // Premium Özelliği
   ownerUserId String? @db.UniqueIdentifier
   Owner User? @relation("UserGeneratedPrograms", fields: [ownerUserId], references: [userId], onDelete: NoAction, onUpdate: NoAction)
-  // (Öneri 2b) - Normalleştirildi
+  
   goalTypeId       Int?
   GoalType         GoalType? @relation(fields: [goalTypeId], references: [goalTypeId])
   
@@ -320,7 +302,6 @@ model WorkoutProgram {
   fitnessLevelId   Int?
   FitnessLevel     FitnessLevel? @relation(fields: [fitnessLevelId], references: [fitnessLevelId])
 
-  // İlişkiler
   translations      WorkoutProgramTranslation[]
   programAssignment UserProgramAssignment[]
 }
@@ -330,12 +311,8 @@ model ChallengeWorkoutPlan {
   durationDays    Int
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
-
-  // (Öneri 2b) - Normalleştirildi
   fitnessLevelId Int?
   FitnessLevel   FitnessLevel? @relation(fields: [fitnessLevelId], references: [fitnessLevelId])
-
-  // İlişkiler
   translations  ChallengeWorkoutPlanTranslation[]
   day           ChallengeWorkoutPlanDay[]
   userProgress  UserChallengePlan[]
@@ -347,15 +324,10 @@ model ChallengeWorkoutPlanDay {
   isRestDay                 Boolean  @default(false)
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
-
-  // (Öneri 2b) - Normalleştirildi
   goalTypeId   Int?
   GoalType     GoalType? @relation(fields: [goalTypeId], references: [goalTypeId])
-  
   bodyTargetId Int?
   BodyTarget   BodyTarget? @relation(fields: [bodyTargetId], references: [bodyTargetId])
-
-  // İlişkiler
   challengePlanId String               @db.UniqueIdentifier
   ChallengePlan   ChallengeWorkoutPlan @relation(fields: [challengePlanId], references: [challengePlanId], onDelete: Cascade)
   translations    ChallengeWorkoutPlanDayTranslation[]
@@ -367,16 +339,15 @@ model Workout {
   workoutId          String    @id @default(uuid()) @db.UniqueIdentifier
   effectivenessScore Decimal?  @db.Decimal(3, 2)
   metValue           Decimal?  @db.Decimal(4, 2)
-  
-  // (Öneri 2b) - Normalleştirildi
   workoutTypeId      Int
   WorkoutType        WorkoutType @relation(fields: [workoutTypeId], references: [workoutTypeId])
 
-  // İlişkiler
-  workoutCategoryId  String?   @db.UniqueIdentifier
-  Category           WorkoutCategory? @relation(fields: [workoutCategoryId], references: [workoutCategoryId], onUpdate: NoAction, onDelete: NoAction)
+  // DEĞİŞTİ: String? @db.UniqueIdentifier -> Int?
+  workoutCategoryId  Int?
+  Category           WorkoutCategory?  @relation(fields: [workoutCategoryId], references: [workoutCategoryId], onUpdate: NoAction, onDelete: NoAction)
 
-  workoutEquipmentId String?   @db.UniqueIdentifier
+  // DEĞİŞTİ: String? @db.UniqueIdentifier -> Int?
+  workoutEquipmentId Int?
   Equipment          WorkoutEquipment? @relation(fields: [workoutEquipmentId], references: [workoutEquipmentId], onUpdate: NoAction, onDelete: NoAction)
 
   translations       WorkoutTranslation[]
@@ -384,79 +355,67 @@ model Workout {
   targetMuscle       TargetMuscle[]
 }
 
+// DEĞİŞTİ: String @id -> Int @id
 model WorkoutCategory {
-  workoutCategoryId String  @id @default(uuid()) @db.UniqueIdentifier
+  workoutCategoryId Int     @id
   categoryKey       String  @unique @db.NVarChar(100)
   movementPattern   String? @db.NVarChar(100)
   isCompound        Boolean @default(false)
-
-  // İlişkiler
   workout           Workout[]
-  translations      WorkoutCategoryTranslation[] // YENİ
+  translations      WorkoutCategoryTranslation[]
 }
 
 model WorkoutAsset {
   assetId    String  @id @default(uuid()) @db.UniqueIdentifier
   assetPhoto String? @db.NVarChar(Max)
   assetVideo String? @db.NVarChar(Max)
-
-  // İlişkiler
-  genderId  Int    @default(3) // Varsayılan "all"
-  Gender    Gender @relation(fields: [genderId], references: [genderId])
-  workoutId String @db.UniqueIdentifier
+  genderId  Int     @default(3)
+  Gender    Gender  @relation(fields: [genderId], references: [genderId])
+  workoutId String  @db.UniqueIdentifier
   Workout   Workout @relation(fields: [workoutId], references: [workoutId], onDelete: Cascade)
 }
 
+// DEĞİŞTİ: String @id -> Int @id
 model Muscle {
-  muscleId String @id @default(uuid()) @db.UniqueIdentifier
-
-  // İlişkiler
+  muscleId Int    @id
   workout      TargetMuscle[]
   translations MuscleTranslation[]
 }
 
+// DEĞİŞTİ: String @id -> Int @id
 model HealthLimitation {
-  healthLimitationId String @id @default(uuid()) @db.UniqueIdentifier
-  // genderId kaldırıldı, ContentAudience'e taşındı (Öneri 3b)
-
-  // İlişkiler
+  healthLimitationId Int @id
   user         UserHealthLimitation[]
   translations HealthLimitationTranslation[]
 }
 
+// DEĞİŞTİ: String @id -> Int @id
 model GoalBodyPart {
-  goalBodyPartId String @id @default(uuid()) @db.UniqueIdentifier
-  // genderId kaldırıldı, ContentAudience'e taşındı (Öneri 3b)
-
-  // İlişkiler
+  goalBodyPartId Int @id
   user         UserGoalPart[]
   translations GoalBodyPartTranslation[]
 }
 
+// DEĞİŞTİ: String @id -> Int @id
 model WorkoutEquipment {
-  workoutEquipmentId String @id @default(uuid()) @db.UniqueIdentifier
-
-  // İlişkiler
+  workoutEquipmentId Int @id
   user              UserAvailableWorkoutEquipment[]
   translations      WorkoutEquipmentTranslation[]
   workout           Workout[]
   userPreference    UserProgramPreference[]
 }
 
+// DEĞİŞTİ: String @id -> Int @id
 model WorkoutLocation {
-  workoutLocationId String @id @default(uuid()) @db.UniqueIdentifier
-
-  // İlişkiler
+  workoutLocationId Int @id
   user         UserWorkoutLocation[]
   translations WorkoutLocationTranslation[]
 }
 
-
 // ========================================================================
-// 6. TÜM ÇEVİRİ MODELLERİ (Gruplandırılmış, FK'lar güncellenmiş)
+// 6. TÜM ÇEVİRİ MODELLERİ (FK'lar güncellenmiş)
 // ========================================================================
 
-// --- Yeni Ana Veri Çevirileri ---
 model GoalTypeTranslation {
   goalTypeId   Int
   languageCode String       @db.NVarChar(10)
@@ -506,17 +465,17 @@ model FitnessLevelTranslation {
   @@id([fitnessLevelId, languageCode])
 }
 model WorkoutCategoryTranslation {
-  workoutCategoryId String          @db.UniqueIdentifier
+  // DEĞİŞTİ: String @db.UniqueIdentifier -> Int
+  workoutCategoryId Int
   languageCode      String          @db.NVarChar(10)
   name              String          @db.NVarChar(100)
   description       String?         @db.NVarChar(Max)
   WorkoutCategory   WorkoutCategory @relation(fields: [workoutCategoryId], references: [workoutCategoryId], onDelete: Cascade)
   @@id([workoutCategoryId, languageCode])
 }
-
-// --- Mevcut & Diğer Yeni Çeviriler ---
 model HealthLimitationTranslation {
-  healthLimitationId String @db.UniqueIdentifier
+  // DEĞİŞTİ: String @db.UniqueIdentifier -> Int
+  healthLimitationId Int
   languageCode       String @db.NVarChar(10)
   name               String @db.NVarChar(100)
   description        String? @db.NVarChar(Max)
@@ -524,7 +483,8 @@ model HealthLimitationTranslation {
   @@id([healthLimitationId, languageCode])
 }
 model GoalBodyPartTranslation {
-  goalBodyPartId String       @db.UniqueIdentifier
+  // DEĞİŞTİ: String @db.UniqueIdentifier -> Int
+  goalBodyPartId Int
   languageCode   String       @db.NVarChar(10)
   name           String       @db.NVarChar(100)
   description    String?      @db.NVarChar(Max)
@@ -532,7 +492,8 @@ model GoalBodyPartTranslation {
   @@id([goalBodyPartId, languageCode])
 }
 model WorkoutEquipmentTranslation {
-  workoutEquipmentId String           @db.UniqueIdentifier
+  // DEĞİŞTİ: String @db.UniqueIdentifier -> Int
+  workoutEquipmentId Int
   languageCode       String           @db.NVarChar(10)
   name               String           @db.NVarChar(100)
   description        String?          @db.NVarChar(Max)
@@ -540,7 +501,8 @@ model WorkoutEquipmentTranslation {
   @@id([workoutEquipmentId, languageCode])
 }
 model WorkoutLocationTranslation {
-  workoutLocationId String          @db.UniqueIdentifier
+  // DEĞİŞTİ: String @db.UniqueIdentifier -> Int
+  workoutLocationId Int
   languageCode      String          @db.NVarChar(10)
   name              String          @db.NVarChar(100)
   description       String?         @db.NVarChar(Max)
@@ -548,12 +510,15 @@ model WorkoutLocationTranslation {
   @@id([workoutLocationId, languageCode])
 }
 model MuscleTranslation {
-  muscleId     String @db.UniqueIdentifier
+  // DEĞİŞTİ: String @db.UniqueIdentifier -> Int
+  muscleId     Int
   languageCode String @db.NVarChar(10)
   name         String @db.NVarChar(100)
   Muscle       Muscle @relation(fields: [muscleId], references: [muscleId], onDelete: Cascade)
   @@id([muscleId, languageCode])
 }
+
+// (Bunlar UUID ID'li içeriklere bağlı kaldığı için DEĞİŞMEDİ)
 model WorkoutTranslation {
   workoutId    String  @db.UniqueIdentifier
   languageCode String  @db.NVarChar(10)
@@ -587,43 +552,47 @@ model ChallengeWorkoutPlanDayTranslation {
   @@id([challengeWorkoutPlanDayId, languageCode])
 }
 
-
 // ========================================================================
 // 7. İLİŞKİ TABLOLARI (M:N Junction Tables - FK'lar güncellenmiş)
 // ========================================================================
 
 model UserHealthLimitation {
   userId             String   @db.UniqueIdentifier
-  healthLimitationId String   @db.UniqueIdentifier // ID Tipi (UUID) güncellendi
+  // DEĞİŞTİ: String @db.UniqueIdentifier -> Int
+  healthLimitationId Int
   User               User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
   HealthLimitation   HealthLimitation @relation(fields: [healthLimitationId], references: [healthLimitationId], onDelete: Cascade)
   @@id([userId, healthLimitationId])
 }
 model UserGoalPart {
   userId         String   @db.UniqueIdentifier
-  goalBodyPartId String   @db.UniqueIdentifier // ID Tipi (UUID) güncellendi
+  // DEĞİŞTİ: String @db.UniqueIdentifier -> Int
+  goalBodyPartId Int
   User           User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
   GoalBodyPart   GoalBodyPart @relation(fields: [goalBodyPartId], references: [goalBodyPartId], onDelete: Cascade)
   @@id([userId, goalBodyPartId])
 }
 model UserAvailableWorkoutEquipment {
   userId             String   @db.UniqueIdentifier
-  workoutEquipmentId String   @db.UniqueIdentifier // ID Tipi (UUID) güncellendi
+  // DEĞİŞTİ: String @db.UniqueIdentifier -> Int
+  workoutEquipmentId Int
   User               User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
   WorkoutEquipment   WorkoutEquipment @relation(fields: [workoutEquipmentId], references: [workoutEquipmentId], onDelete: Cascade)
   @@id([userId, workoutEquipmentId])
 }
 model UserWorkoutLocation {
   userId            String   @db.UniqueIdentifier
-  workoutLocationId String   @db.UniqueIdentifier // ID Tipi (UUID) güncellendi
+  // DEĞİŞTİ: String @db.UniqueIdentifier -> Int
+  workoutLocationId Int
   User              User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
   WorkoutLocation   WorkoutLocation @relation(fields: [workoutLocationId], references: [workoutLocationId], onDelete: Cascade)
   @@id([userId, workoutLocationId])
 }
 model TargetMuscle {
-  workoutId       String   @db.UniqueIdentifier // ID Tipi (UUID) güncellendi
-  muscleId        String   @db.UniqueIdentifier // ID Tipi (UUID) güncellendi
-  targetIntensity Int? // Örn: 1 (primary), 2 (secondary)
+  workoutId       String   @db.UniqueIdentifier // Workout ID (UUID)
+  // DEĞİŞTİ: String @db.UniqueIdentifier -> Int
+  muscleId        Int // Muscle ID (Int)
+  targetIntensity Int?
   Workout         Workout  @relation(fields: [workoutId], references: [workoutId], onDelete: Cascade)
   Muscle          Muscle   @relation(fields: [muscleId], references: [muscleId], onDelete: Cascade)
   @@id([workoutId, muscleId])

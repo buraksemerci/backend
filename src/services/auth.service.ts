@@ -9,7 +9,7 @@ import {
     SocialRegisterInput,
     SocialLoginInput,
     SocialMergeInput,
-    ProfileCreationInput, // YENİ TİP (Zod'dan)
+    ProfileCreationInput,
 } from '../utils/zod.schemas';
 import {
     generateSixDigitCode,
@@ -22,17 +22,17 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import logger from '../utils/logger';
 import { env } from '../utils/env';
-// YENİ: Program atama servisimizi import ediyoruz
 import { assignInitialProgramToUser } from './program.service';
 
 /**
+ * (MEVCUT YARDIMCI - Değişiklik Yok)
  * GÜNCELLENDİ: Bu yardımcı fonksiyon, yeni normalize edilmiş şemaya göre
  * tüm profil verilerini (1:1 ve M:N) oluşturur veya günceller.
  */
 async function _createNormalizedProfileData(
     tx: Prisma.TransactionClient,
     userId: string,
-    input: ProfileCreationInput, // Yeni Zod tipimiz
+    input: ProfileCreationInput,
 ) {
     logger.info(`[AuthService] Normalize edilmiş profil verisi ${userId} için oluşturuluyor...`);
 
@@ -42,45 +42,45 @@ async function _createNormalizedProfileData(
     await tx.userAvailableWorkoutEquipment.deleteMany({ where: { userId } });
     await tx.userWorkoutLocation.deleteMany({ where: { userId } });
 
-    // 1:1 ilişkilerde 'deleteMany' 'upsert'den daha güvenlidir (kayıt yoksa hata vermez)
     await tx.userProfile.deleteMany({ where: { userId } });
     await tx.userBody.deleteMany({ where: { userId } });
     await tx.userGoal.deleteMany({ where: { userId } });
     await tx.userSetting.deleteMany({ where: { userId } });
     await tx.userProgramPreference.deleteMany({ where: { userId } });
+    await tx.userProgramAssignment.deleteMany({ where: { userId } });
 
 
-    // 2. Yeni 1:1 verileri oluştur (Zod şemalarımızla 1:1 eşleşiyor)
+    // 2. Yeni 1:1 verileri oluştur
     await tx.userProfile.create({ data: { userId, ...input.profile } });
     await tx.userBody.create({ data: { userId, ...input.body } });
     await tx.userGoal.create({ data: { userId, ...input.goal } });
     await tx.userSetting.create({ data: { userId, ...input.settings } });
     await tx.userProgramPreference.create({ data: { userId, ...input.preference } });
 
-    // 3. Yeni M:N verileri oluştur (Artık Int[] değil, String (UUID)[] alıyor)
+    // 3. Yeni M:N verileri oluştur
     await tx.userGoalPart.createMany({
         data: input.targetBodyPartIds.map((id) => ({
             userId,
-            goalBodyPartId: id, // Bu artık bir UUID
+            goalBodyPartId: id,
         })),
     });
     await tx.userAvailableWorkoutEquipment.createMany({
         data: input.availableEquipmentIds.map((id) => ({
             userId,
-            workoutEquipmentId: id, // Bu artık bir UUID
+            workoutEquipmentId: id,
         })),
     });
     await tx.userWorkoutLocation.createMany({
         data: input.workoutLocationIds.map((id) => ({
             userId,
-            workoutLocationId: id, // Bu artık bir UUID
+            workoutLocationId: id,
         })),
     });
     if (input.healthLimitationIds.length > 0) {
         await tx.userHealthLimitation.createMany({
             data: input.healthLimitationIds.map((id) => ({
                 userId,
-                healthLimitationId: id, // Bu artık bir UUID
+                healthLimitationId: id,
             })),
         });
     }
@@ -96,43 +96,72 @@ export const registerUserService = async (
 ) => {
     const passwordHash = await bcrypt.hash(input.password, 12);
 
-    const existingUser = await prisma.user.findFirst({
-        where: {
-            OR: [{ email: input.email }, { username: input.username }],
-        },
+    // --- YENİ MANTIK BAŞLANGICI (SİZİN ÖNERİNİZ) ---
+
+    // Kural 1: Önce SADECE 'username'i kontrol et (Transaction dışında)
+    const existingUserByUsername = await prisma.user.findUnique({
+        where: { username: input.username },
     });
 
-    if (existingUser && existingUser.isEmailVerified) {
+    if (existingUserByUsername) {
+        // "kullanıcı adı zaten kullanımdaysa her türlü hata verecek"
+        logger.warn(`[AuthService] Kayıt engellendi: ${input.username} kullanıcı adı zaten alınmış.`);
         throw new Error('CONFLICT');
     }
+
+    // 'username' müsait olduğuna göre, 'email' durumunu kontrol etmek için transaction başlat
+    // --- YENİ MANTIK SONU ---
 
     try {
         const { user, tokens } = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             let userId: string;
 
-            if (existingUser && !existingUser.isEmailVerified) {
-                logger.info(`[AuthService] Smart Registration: ${existingUser.userId} üzerine yazılıyor...`);
-                userId = existingUser.userId;
+            // Kural 2: Şimdi 'email'i kontrol et (Transaction içinde)
+            const existingUserByEmail = await tx.user.findUnique({
+                where: { email: input.email },
+            });
 
-                // Ana User ve Password bilgilerini güncelle
-                await tx.user.update({
-                    where: { userId },
-                    data: {
-                        username: input.username,
-                        email: input.email,
-                        createdAt: new Date(),
-                    },
-                });
-                await tx.userLocalCredential.upsert({
-                    where: { userId },
-                    create: { userId, passwordHash },
-                    update: { passwordHash },
-                });
+            if (existingUserByEmail) {
 
-                // GÜNCELLENDİ: Eski _createOrUpdateProfileData yerine _createNormalizedProfileData
-                await _createNormalizedProfileData(tx, userId, input);
+                // Durum A: E-posta mevcut VE doğrulanmış (CONFLICT)
+                if (existingUserByEmail.isEmailVerified) {
+                    // "sistemde onlanmış bir e posta ile denenmesi durumunda yine hata verecek"
+                    logger.warn(`[AuthService] Kayıt engellendi: ${input.email} e-postası zaten doğrulanmış.`);
+                    throw new Error('CONFLICT');
+                }
 
-            } else {
+                // Durum B: E-posta mevcut AMA doğrulanmamış ("Akıllı Kayıt")
+                else {
+                    // "kullanıcı adı boşsa ve e posta onaylanmamışsa akıllı kayıt olacak"
+                    logger.info(`[AuthService] Smart Registration: ${existingUserByEmail.userId} üzerine yazılıyor...`);
+                    userId = existingUserByEmail.userId;
+
+                    // 'username'in boş olduğunu zaten dışarıda kontrol ettik.
+                    // Şimdi bu e-posta kaydını yeni 'username' ile GÜNCELLE.
+                    await tx.user.update({
+                        where: { userId },
+                        data: {
+                            username: input.username, // Yeni (ve müsait olduğu bilinen) username
+                            email: input.email,
+                            createdAt: new Date(),
+                        },
+                    });
+
+                    // Şifreyi güncelle/oluştur
+                    await tx.userLocalCredential.upsert({
+                        where: { userId },
+                        create: { userId, passwordHash },
+                        update: { passwordHash },
+                    });
+
+                    // Profil verilerini yeniden oluştur
+                    await _createNormalizedProfileData(tx, userId, input);
+                }
+            }
+
+            // Durum C: E-posta mevcut değil ("Temiz Kayıt")
+            else {
+                // Hem 'username' hem de 'email' yeni.
                 logger.info(`[AuthService] Clean Registration: ${input.email} için yeni kullanıcı...`);
 
                 const newUser = await tx.user.create({
@@ -152,20 +181,14 @@ export const registerUserService = async (
                     },
                 });
 
-                // GÜNCELLENDİ: Eski _createOrUpdateProfileData yerine _createNormalizedProfileData
                 await _createNormalizedProfileData(tx, userId, input);
             }
 
-            // --- YENİ ADIM (Sizin Stratejiniz) ---
-            // Profil verileri oluşturulduktan hemen sonra,
-            // bu verilere göre ilk programı atıyoruz.
-            // (Hepsi aynı transaction içinde, atomik)
-            logger.info(`[AuthService] ${userId} için başlangıç programı atanıyor...`);
-            await assignInitialProgramToUser(tx, userId, input);
-            // --- YENİ ADIM SONU ---
-
             // --- MEVCUT ANA MANTIK (Değişiklik Yok) ---
             // (Verification Code, Send Email, Sign Tokens, Save Refresh Token...)
+            logger.info(`[AuthService] ${userId} için başlangıç programı atanıyor...`);
+            await assignInitialProgramToUser(tx, userId, input);
+
             const code = generateSixDigitCode();
             const hashedCode = await bcrypt.hash(code, 10);
             const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
@@ -206,11 +229,20 @@ export const registerUserService = async (
 
         return { user, tokens };
     } catch (error: unknown) {
+        // P2002 (Unique constraint) hatası bu yeni mantıkta
+        // SADECE 'username' kontrolünden kaçan bir race condition (yarış durumu)
+        // veya 'email'de (çok düşük ihtimal) olursa tetiklenir.
         if (error instanceof PrismaClientKnownRequestError) {
             if (error.code === 'P2002') {
+                logger.warn(`[AuthService] P2002 Unique Constraint Hatası (muhtemelen race condition): ${error.meta?.target}`);
                 throw new Error('CONFLICT');
             }
         }
+        // Manuel olarak fırlatılan CONFLICT hatalarını yakala
+        if (error instanceof Error && error.message === 'CONFLICT') {
+            throw error;
+        }
+
         logger.error(error, '[AuthService] Registration Transaction Error');
         throw new Error('Internal Server Error');
     }
@@ -225,7 +257,6 @@ export const loginUserService = async (
 ) => {
     const { loginIdentifier, password } = input;
 
-    // (Sorgu aynı, ID'ler veya profille işi yok)
     const user = await prisma.user.findFirst({
         where: {
             OR: [{ email: loginIdentifier }, { username: loginIdentifier }],
@@ -257,7 +288,6 @@ export const loginUserService = async (
 
     logger.info(`[AuthService] User logged in: ${user.userId}, Verified: ${user.isEmailVerified}`);
 
-    // (Token mantığı aynı)
     const tokens = await signTokens(user.userId, user.isEmailVerified);
 
     const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
@@ -288,7 +318,6 @@ export const verifyEmailCodeService = async (
     userAgent: string,
     deviceId: string,
 ) => {
-    // (Sorgu aynı, ID'ler veya profille işi yok)
     const userWithToken = await prisma.user.findUnique({
         where: { userId },
         include: {
@@ -309,7 +338,6 @@ export const verifyEmailCodeService = async (
 
     const codeMatch = await bcrypt.compare(code, tokenRecord.tokenHash);
 
-    // (Brute-force koruması aynı)
     if (!codeMatch) {
         const MAX_ATTEMPTS = 5;
         const newAttemptCount = tokenRecord.failedAttempts + 1;
@@ -342,7 +370,6 @@ export const verifyEmailCodeService = async (
         });
     });
 
-    // (Token mantığı aynı)
     logger.info(`[AuthService] User verified: ${userId}`);
     const tokens = await signTokens(userId, true);
 
@@ -367,9 +394,6 @@ export const verifyEmailCodeService = async (
 };
 
 // === RESEND, FORGOT, RESET (ANA MANTIK DEĞİŞMEDİ) ===
-// (Bu fonksiyonlar sadece User, EmailVerificationToken, PasswordResetToken 
-// tablolarını kullanır, bu nedenle değişiklik gerekmez)
-
 export const resendVerificationCodeService = async (
     userId: string,
     ipAddress: string,
@@ -469,7 +493,6 @@ export const resetPasswordService = async (input: ResetPasswordInput['body']) =>
     const codeMatch = await bcrypt.compare(code, tokenRecord.tokenHash);
 
     if (!codeMatch) {
-        // (Brute-force koruması aynı)
         const MAX_ATTEMPTS = 5;
         const newAttemptCount = tokenRecord.failedAttempts + 1;
 
@@ -533,12 +556,14 @@ export const socialRegisterService = async (
         throw new Error('Provider not yet supported');
     }
 
-    const existingUser = await prisma.user.findUnique({
-        where: { email: providerData.email },
-        include: { UserLocalCredential: true },
+    // --- YENİ MANTIK (Aynen registerUserService'teki gibi) ---
+    // 1. Önce 'username'i kontrol et
+    const existingUserByUsername = await prisma.user.findUnique({
+        where: { username: input.username },
     });
 
-    if (existingUser && existingUser.isEmailVerified && existingUser.UserLocalCredential) {
+    if (existingUserByUsername) {
+        logger.warn(`[AuthService] Sosyal Kayıt engellendi: ${input.username} kullanıcı adı zaten alınmış.`);
         throw new Error('CONFLICT');
     }
 
@@ -546,39 +571,62 @@ export const socialRegisterService = async (
         const tokens = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             let userId: string;
 
-            if (existingUser && !existingUser.isEmailVerified) {
-                logger.info(`[AuthService] Social Registration (Overwrite): ${existingUser.userId}...`);
-                userId = existingUser.userId;
+            // 2. 'username' müsait, şimdi 'email'i kontrol et
+            const existingUserByEmail = await tx.user.findUnique({
+                where: { email: providerData.email },
+                include: { UserLocalCredential: true }
+            });
 
+            // Durum A: E-posta mevcut VE lokal hesabı var (doğrulanmış veya onaysız)
+            if (existingUserByEmail && existingUserByEmail.UserLocalCredential) {
+                // Bu, lokal bir hesaptır ve sosyal kayıtla üzerine yazılmamalıdır.
+                // (Eğer onaysızsa, kullanıcının önce 'socialMerge' yapması gerekir)
+                logger.warn(`[AuthService] Sosyal Kayıt engellendi: ${providerData.email} lokal bir hesaba ait.`);
+                throw new Error('CONFLICT');
+            }
+
+            // Durum B: E-posta mevcut AMA lokal hesabı yok ("Akıllı Sosyal Kayıt")
+            // (Bu, daha önce başka bir sosyal sağlayıcı ile açılmış olabilir)
+            else if (existingUserByEmail && !existingUserByEmail.UserLocalCredential) {
+                logger.info(`[AuthService] Social Registration (Smart): ${existingUserByEmail.userId} üzerine yazılıyor...`);
+                userId = existingUserByEmail.userId;
+
+                // 'username'i güncelle (çünkü ilk sosyal kayıtta bu alınmamış olabilir)
+                // ve doğrulanmış say
                 await tx.user.update({
                     where: { userId },
                     data: {
+                        username: input.username,
                         isEmailVerified: true,
-                        createdAt: new Date(),
                     },
                 });
-            } else {
+            }
+
+            // Durum C: E-posta mevcut değil ("Temiz Sosyal Kayıt")
+            else {
                 logger.info(`[AuthService] Social Registration (Clean): ${providerData.email}...`);
 
                 const newUser = await tx.user.create({
                     data: {
                         email: providerData.email,
                         username: input.username,
-                        isEmailVerified: true,
+                        isEmailVerified: true, // Sosyalden geldiği için
                     },
-                    select: { userId: true },
+                    select: { userId: true }
                 });
                 userId = newUser.userId;
             }
 
-            // GÜNCELLENDİ: Profil verisi oluşturma
+            // --- YENİ MANTIK SONU ---
+
+            // Profil verisi oluşturma
             await _createNormalizedProfileData(tx, userId, input);
 
-            // YENİ ADIM: Program atama
+            // Program atama
             logger.info(`[AuthService] ${userId} için sosyal kayıt programı atanıyor...`);
             await assignInitialProgramToUser(tx, userId, input);
 
-            // --- MEVCUT ANA MANTIK (Değişiklik Yok) ---
+            // Harici (External) Login kaydını oluştur/güncelle
             await tx.userExternalLogin.upsert({
                 where: {
                     loginProvider_providerKey: {
@@ -592,12 +640,12 @@ export const socialRegisterService = async (
                     providerKey: providerData.externalId,
                 },
                 update: {
-                    userId,
+                    userId, // (Gerekirse 'userId'yi güncelle, örn: e-posta birleştiyse)
                 },
             });
 
+            // Tokenları imzala ve kaydet
             const tokens = await signTokens(userId, true);
-
             const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
             const expiresAt = new Date(Date.now() + env.JWT_REFRESH_EXPIRATION_DAYS * 24 * 60 * 60 * 1000);
 
@@ -612,7 +660,6 @@ export const socialRegisterService = async (
                     deviceId: deviceId,
                 },
             });
-            // --- MEVCUT ANA MANTIK SONU ---
 
             return tokens;
         });
@@ -620,6 +667,8 @@ export const socialRegisterService = async (
         return tokens;
     } catch (error: unknown) {
         if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
+            // (Bu, 'update' veya 'create' sırasındaki benzersizlik hatasını yakalar)
+            logger.warn(`[AuthService] Sosyal Kayıt P2002 Hatası: ${error.meta?.target}`);
             throw new Error('CONFLICT');
         }
         if (error instanceof Error && (error.message === 'TOKEN_VERIFICATION_FAILED' || error.message === 'CONFLICT')) {
@@ -631,8 +680,6 @@ export const socialRegisterService = async (
 };
 
 // === SOCIAL LOGIN & MERGE (ANA MANTIK DEĞİŞMEDİ) ===
-// (Bu fonksiyonlar profil oluşturma ile ilgilenmez, sadece kimlik doğrular)
-
 export const socialLoginService = async (
     input: SocialLoginInput['body'],
     ipAddress: string,
@@ -816,8 +863,6 @@ export const socialMergeService = async (
 };
 
 // === REFRESH & LOGOUT (ANA MANTIK DEĞİŞMEDİ) ===
-// (Bu fonksiyonlar da profille ilgilenmez)
-
 export const refreshTokenService = async (
     refreshToken: string,
     deviceId: string,

@@ -5,26 +5,23 @@ import { z } from 'zod';
 // TEMEL BLOKLAR (GÜNCELLENDİ)
 // ===================================
 
-// Öneri 2e/2b: 'gender' -> 'genderId' (Int, isteğe bağlı)
 const userProfileSchema = z.object({
     firstName: z.string().min(2),
     lastName: z.string().min(2),
     birthDate: z.string().datetime(),
-    genderId: z.number().int().min(1).max(4).optional().nullable(), // Artık Int ve isteğe bağlı
+    genderId: z.number().int().min(1).max(4).optional().nullable(),
 });
 
-// Öneri 2b: String'ler ID'lere dönüştü (Normalleştirildi)
 const userBodySchema = z.object({
     heightCM: z.number().positive(),
     weightKG: z.number().positive(),
-    activityLevelId: z.number().int(), // 'activityLevel' -> 'activityLevelId'
-    bodyTypeId: z.number().int(),      // 'bodyType' -> 'bodyTypeId'
-    fitnessLevelId: z.number().int(),  // YENİ
+    activityLevelId: z.number().int(),
+    bodyTypeId: z.number().int(),
+    fitnessLevelId: z.number().int(),
 });
 
-// Öneri 2b: String'ler ID'lere dönüştü (Normalleştirildi)
 const userGoalSchema = z.object({
-    goalTypeId: z.number().int(), // 'primaryGoal' -> 'goalTypeId'
+    goalTypeId: z.number().int(),
     targetWeightKG: z.number().positive().nullable().optional(),
 });
 
@@ -34,12 +31,11 @@ const userSettingSchema = z.object({
     theme: z.string().default('system'),
 });
 
-// YENİ: Kullanıcı tercihlerini kayıt anında almak için
 const userProgramPreferenceSchema = z.object({
     workoutDuration: z.number().int().optional().nullable(),
     startWithWarmup: z.boolean().default(true),
-    // Öneri 2a (UUID): workoutEquipmentId artık Int değil, String (UUID)
-    workoutEquipmentId: z.string().uuid().optional().nullable(),
+    // DEĞİŞTİ: z.string().uuid() -> z.number().int()
+    workoutEquipmentId: z.number().int().optional().nullable(),
 });
 
 // ===================================
@@ -51,30 +47,26 @@ export const profileDataSchema = z.object({
     body: userBodySchema,
     goal: userGoalSchema,
     settings: userSettingSchema,
-    preference: userProgramPreferenceSchema, // YENİ
+    preference: userProgramPreferenceSchema,
 
-    // M:N İlişki ID'leri (Öneri 2a: Artık Int değil, String UUID olmalılar)
-    healthLimitationIds: z.array(z.string().uuid()).default([]),
-    targetBodyPartIds: z.array(z.string().uuid()).min(1),
-    availableEquipmentIds: z.array(z.string().uuid()).min(1),
-    workoutLocationIds: z.array(z.string().uuid()).min(1),
+    // M:N İlişki ID'leri (DEĞİŞTİ: z.string().uuid() -> z.number().int())
+    healthLimitationIds: z.array(z.number().int()).default([]),
+    targetBodyPartIds: z.array(z.number().int()).min(1),
+    availableEquipmentIds: z.array(z.number().int()).min(1),
+    workoutLocationIds: z.array(z.number().int()).min(1), // .min(1) kuralı orijinal dosyada vardı
 
     // "Kayıt anında program atama" stratejimiz için YENİ alan
-    // (0 = Pazar, 1 = Pzt, 2 = Salı, 3 = Çar, 4 = Per, 5 = Cuma, 6 = Cmt)
     workoutDays: z.array(z.number().int().min(0).max(6)).min(1).max(7),
 });
 
-// (Bu tip, auth.service.ts'i güncellerken kilit rol oynayacak)
 export type ProfileCreationInput = z.infer<typeof profileDataSchema>;
 
 // ===================================
-// MEVCUT AUTH ŞEMALARI (DEĞİŞİKLİK YOK - Ana Mantık Korundu)
+// MEVCUT AUTH ŞEMALARI (Otomatik olarak güncellendiler)
 // ===================================
 
-// (registerSchema, profileDataSchema'yı merge ettiği için otomatik olarak güncellendi)
 export const registerSchema = z.object({
     body: z.object({
-        // Auth'a özel alanlar
         email: z.string().email(),
         password: z.string().min(8),
         username: z.string().min(3),
@@ -111,12 +103,10 @@ export const resetPasswordSchema = z.object({
     }),
 });
 
-// (socialRegisterSchema da profileDataSchema'yı merge ettiği için otomatik güncellendi)
 const socialProviderEnum = z.enum(['GOOGLE', 'APPLE', 'FACEBOOK']);
 
 export const socialRegisterSchema = z.object({
     body: z.object({
-        // Sosyal Auth'a özel alanlar
         provider: socialProviderEnum,
         providerToken: z.string().min(1),
         username: z.string().min(3),
@@ -142,7 +132,7 @@ export const socialMergeSchema = z.object({
 });
 
 // ===================================
-// OTURUM (SESSION) ŞEMALARI (DEĞİŞİKLİK YOK)
+// OTURUM (SESSION) ŞEMALARI
 // ===================================
 export const refreshSchema = z.object({
     body: z.object({
@@ -159,32 +149,28 @@ export const logoutSchema = z.object({
 
 
 // ===================================
-// YENİ: KULLANICI TAKVİM (SCHEDULE) ŞEMALARI
+// KULLANICI TAKVİM (SCHEDULE) ŞEMALARI
 // ===================================
 
-// Kullanıcının bir günü nasıl güncelleyeceğini tanımlar:
-// Ya bir programId verir (antrenman günü)
-// Ya da isRestDay: true verir (dinlenme günü)
 const dayAssignmentSchema = z.object({
-    dayOfWeek: z.number().int().min(0).max(6), // 0-6 (Pazar-Cmt)
-    programId: z.string().uuid().optional().nullable(), // Hangi programı atadığı
-    isRestDay: z.boolean().default(false), // Veya dinlenme günü mü?
+    dayOfWeek: z.number().int().min(0).max(6),
+    // (programId UUID olarak kaldı, bu doğru)
+    programId: z.string().uuid().optional().nullable(),
+    isRestDay: z.boolean().default(false),
 }).refine(data => {
-    // Aynı anda hem programId hem de isRestDay: true olamaz
     return !(data.programId && data.isRestDay);
 }, {
     message: "A day cannot be both a rest day and have a program assigned.",
     path: ["programId", "isRestDay"],
 });
 
-// Kullanıcı bize 7 günlük tam bir dizi göndermeli
 export const updateScheduleSchema = z.object({
     body: z.object({
         assignments: z.array(dayAssignmentSchema).length(7, "You must provide all 7 days of the week."),
     }),
 });
 // ===================================
-// TÜM TİP ÇIKARIMLARI (DEĞİŞİKLİK YOK)
+// TÜM TİP ÇIKARIMLARI
 // ===================================
 export type UpdateScheduleInput = z.infer<typeof updateScheduleSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
