@@ -25,7 +25,7 @@ model Gender {
 }
 
 model GoalType {
-  goalTypeId   Int    @id @default(autoincrement())
+  goalTypeId   Int    @id
   key          String @unique @db.NVarChar(50) // "weight_loss", "muscle_gain"
   translations GoalTypeTranslation[]
   UserGoal     UserGoal[]
@@ -34,21 +34,21 @@ model GoalType {
 }
 
 model BodyType {
-  bodyTypeId   Int    @id @default(autoincrement())
+  bodyTypeId   Int    @id
   key          String @unique @db.NVarChar(50) // "ectomorph"
   translations BodyTypeTranslation[]
   UserBody     UserBody[]
 }
 
 model ActivityLevel {
-  activityLevelId Int    @id @default(autoincrement())
+  activityLevelId Int    @id
   key             String @unique @db.NVarChar(50) // "sedentary"
   translations      ActivityLevelTranslation[]
   UserBody          UserBody[]
 }
 
 model BodyTarget {
-  bodyTargetId Int    @id @default(autoincrement())
+  bodyTargetId Int    @id
   key          String @unique @db.NVarChar(50) // "full_body", "upper_body"
   translations BodyTargetTranslation[]
   WorkoutProgram WorkoutProgram[]
@@ -56,14 +56,14 @@ model BodyTarget {
 }
 
 model WorkoutType {
-  workoutTypeId Int    @id @default(autoincrement())
+  workoutTypeId Int    @id
   key           String @unique @db.NVarChar(50) // "reps", "duration"
   translations  WorkoutTypeTranslation[]
   Workout       Workout[]
 }
 
 model FitnessLevel {
-  fitnessLevelId Int @id @default(autoincrement()) // 1 = beginner, 2 = intermediate, 3 = advanced
+  fitnessLevelId Int @id
   key            String @unique @db.NVarChar(50)
   translations     FitnessLevelTranslation[]
   UserBody         UserBody[]

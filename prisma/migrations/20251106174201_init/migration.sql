@@ -12,7 +12,7 @@ CREATE TABLE [dbo].[Gender] (
 
 -- CreateTable
 CREATE TABLE [dbo].[GoalType] (
-    [goalTypeId] INT NOT NULL IDENTITY(1,1),
+    [goalTypeId] INT NOT NULL,
     [key] NVARCHAR(50) NOT NULL,
     CONSTRAINT [GoalType_pkey] PRIMARY KEY CLUSTERED ([goalTypeId]),
     CONSTRAINT [GoalType_key_key] UNIQUE NONCLUSTERED ([key])
@@ -20,7 +20,7 @@ CREATE TABLE [dbo].[GoalType] (
 
 -- CreateTable
 CREATE TABLE [dbo].[BodyType] (
-    [bodyTypeId] INT NOT NULL IDENTITY(1,1),
+    [bodyTypeId] INT NOT NULL,
     [key] NVARCHAR(50) NOT NULL,
     CONSTRAINT [BodyType_pkey] PRIMARY KEY CLUSTERED ([bodyTypeId]),
     CONSTRAINT [BodyType_key_key] UNIQUE NONCLUSTERED ([key])
@@ -28,7 +28,7 @@ CREATE TABLE [dbo].[BodyType] (
 
 -- CreateTable
 CREATE TABLE [dbo].[ActivityLevel] (
-    [activityLevelId] INT NOT NULL IDENTITY(1,1),
+    [activityLevelId] INT NOT NULL,
     [key] NVARCHAR(50) NOT NULL,
     CONSTRAINT [ActivityLevel_pkey] PRIMARY KEY CLUSTERED ([activityLevelId]),
     CONSTRAINT [ActivityLevel_key_key] UNIQUE NONCLUSTERED ([key])
@@ -36,7 +36,7 @@ CREATE TABLE [dbo].[ActivityLevel] (
 
 -- CreateTable
 CREATE TABLE [dbo].[BodyTarget] (
-    [bodyTargetId] INT NOT NULL IDENTITY(1,1),
+    [bodyTargetId] INT NOT NULL,
     [key] NVARCHAR(50) NOT NULL,
     CONSTRAINT [BodyTarget_pkey] PRIMARY KEY CLUSTERED ([bodyTargetId]),
     CONSTRAINT [BodyTarget_key_key] UNIQUE NONCLUSTERED ([key])
@@ -44,7 +44,7 @@ CREATE TABLE [dbo].[BodyTarget] (
 
 -- CreateTable
 CREATE TABLE [dbo].[WorkoutType] (
-    [workoutTypeId] INT NOT NULL IDENTITY(1,1),
+    [workoutTypeId] INT NOT NULL,
     [key] NVARCHAR(50) NOT NULL,
     CONSTRAINT [WorkoutType_pkey] PRIMARY KEY CLUSTERED ([workoutTypeId]),
     CONSTRAINT [WorkoutType_key_key] UNIQUE NONCLUSTERED ([key])
@@ -52,7 +52,7 @@ CREATE TABLE [dbo].[WorkoutType] (
 
 -- CreateTable
 CREATE TABLE [dbo].[FitnessLevel] (
-    [fitnessLevelId] INT NOT NULL IDENTITY(1,1),
+    [fitnessLevelId] INT NOT NULL,
     [key] NVARCHAR(50) NOT NULL,
     CONSTRAINT [FitnessLevel_pkey] PRIMARY KEY CLUSTERED ([fitnessLevelId]),
     CONSTRAINT [FitnessLevel_key_key] UNIQUE NONCLUSTERED ([key])
@@ -224,6 +224,7 @@ CREATE TABLE [dbo].[ContentAudience] (
 -- CreateTable
 CREATE TABLE [dbo].[WorkoutProgram] (
     [workoutProgramId] UNIQUEIDENTIFIER NOT NULL,
+    [difficultyLevel] INT NOT NULL,
     [createdAt] DATETIME2 NOT NULL CONSTRAINT [WorkoutProgram_createdAt_df] DEFAULT CURRENT_TIMESTAMP,
     [updatedAt] DATETIME2 NOT NULL,
     [deletedAt] DATETIME2,

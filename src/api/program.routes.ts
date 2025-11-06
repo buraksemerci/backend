@@ -7,6 +7,7 @@ import {
 import { publicApiLimiter } from '../middlewares/rateLimiter';
 import { validate } from '../middlewares/validate';
 import { profileDataSchema } from '../utils/zod.schemas';
+import z from "zod"
 
 const router = Router();
 

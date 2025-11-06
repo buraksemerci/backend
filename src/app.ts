@@ -16,7 +16,13 @@ app.set('trust proxy', 1);
 
 // Middlewares
 app.use(express.json());
-app.use(cors());
+// CORS configuration - allow all origins for development
+app.use(cors({
+    origin: true, // Allow all origins
+    credentials: true, // Allow credentials
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 
 // --- NEW Logger Middleware ---
 app.use(pinoHttp({ logger }));

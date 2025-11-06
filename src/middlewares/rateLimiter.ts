@@ -14,6 +14,11 @@ export const publicApiLimiter = rateLimit({
     },
     standardHeaders: true, // Add "RateLimit-*" headers to response
     legacyHeaders: false, // Disable "X-RateLimit-*" headers
+    statusCode: 429, // Explicitly set status code for rate limit exceeded
+    skip: (req) => {
+        // Skip rate limiting for OPTIONS requests (CORS preflight)
+        return req.method === 'OPTIONS';
+    },
 });
 /**
  * Prevents brute-force and spam against auth endpoints (login, register, forgot-password).
@@ -28,4 +33,9 @@ export const authLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
+    statusCode: 429, // Explicitly set status code for rate limit exceeded
+    skip: (req) => {
+        // Skip rate limiting for OPTIONS requests (CORS preflight)
+        return req.method === 'OPTIONS';
+    },
 });

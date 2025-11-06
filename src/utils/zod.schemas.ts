@@ -157,9 +157,7 @@ export const logoutSchema = z.object({
     }),
 });
 
-// ===================================
-// TÜM TİP ÇIKARIMLARI (DEĞİŞİKLİK YOK)
-// ===================================
+
 // ===================================
 // YENİ: KULLANICI TAKVİM (SCHEDULE) ŞEMALARI
 // ===================================
@@ -185,7 +183,9 @@ export const updateScheduleSchema = z.object({
         assignments: z.array(dayAssignmentSchema).length(7, "You must provide all 7 days of the week."),
     }),
 });
-
+// ===================================
+// TÜM TİP ÇIKARIMLARI (DEĞİŞİKLİK YOK)
+// ===================================
 export type UpdateScheduleInput = z.infer<typeof updateScheduleSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
